@@ -28,6 +28,7 @@ if (toupper(func) == "A") {
                      "rate_constants$beta_2 * X[[\"x2\"]]", # x2 degradation
                      "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
                      "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
+  
 } else {
   # Set parameters for function B
   rate_parameters <- list(lambda_1 = 30, K = 40, beta_1 = 1, lambda_2 = 1, beta_2 = 0.1)
@@ -69,8 +70,6 @@ calculateJumpTime <- function(rT) {
 calculateStats <- function(X_over_time, rate_constants, jump_times) {
   CV_norm <- NA
   covar_norm <- NA
-  stationarity_reached <- NA
-  flux_differences <- NA
   
   # Extract the rate constant parameters
   lambda_1 <- rate_constants$lambda_1
@@ -79,6 +78,7 @@ calculateStats <- function(X_over_time, rate_constants, jump_times) {
   lambda_2 <- rate_constants$lambda_2
   beta_2 <- rate_constants$beta_2
   
+  # Calculate the average number of x1, x2 and x3 molecules
   x_averages <- list()
   
   for (x in rownames(X_over_time)) {
@@ -89,7 +89,7 @@ calculateStats <- function(X_over_time, rate_constants, jump_times) {
   eta_11 <- 1 / x_averages[["x1"]]
   
   # Normalised co-variance
-  eta_12 <- (1 / x_averages[["x1"]]) + (beta_2 / (beta_1 + beta_2))
+  eta_12 <- eta_11 + (beta_2 / (beta_1 + beta_2))
   
   # Record results
   results <- list(eta_11 = eta_11,
@@ -229,57 +229,80 @@ simulation_results <- gillespie(X = X_initial,
 
 message(signif(mean(unlist(simulation_results$molecules_over_time["x1",])), 5))
 
-saveRDS(sim_A, file = "sim_A.rds")
-saveRDS(sim_B, file = "sim_B.rds")
-simulation_results <- readRDS(file = "sim_A.rds")
+# saveRDS(simulation_results, file = "sim_A.rds")
+# saveRDS(simulation_results, file = "sim_B.rds")
 
+# Open the saved simulations for functions (a) and (b)
+sim_A <- readRDS(file = "sim_A.rds")
+sim_B <- readRDS(file = "sim_B.rds")
 
 # Calculate efficiency for the simulation
 simulation_stats <- calculateStats(X_over_time = simulation_results$molecules_over_time,
                                    rate_constants = rate_parameters,
                                    jump_times = simulation_results$jump_times)
 
-# Get the list of reactions per time step
-selected_reactions <- simulation_results$reaction_trace
-# Add the geometric average, i.e. square root of x1 * r2, to the molecules over time matrix
-molecule_counts <- simulation_results$molecules_over_time
-molecule_counts <- rbind(molecule_counts, sqrt(apply(molecule_counts, 2, function(x) prod(unlist(x)))))
-row.names(molecule_counts) <- c(row.names(molecule_counts)[1:nrow(molecule_counts)-1], "geometric_average")
+# Create plot of molecule abundance over time
+timePlot <- function(molecule_counts, plot_colours = c("red", "deepskyblue", "purple"),
+                     title = "Number of Molecules Over Time",
+                     xaxis_label = "Time (s)", yaxis_label = "Number of Molecules",
+                     xlimits = NA, ylimits = NA) {
+  # Convert data into form for plotting
+  molecules_time_df <- data.frame(n_molecules = unlist(c(molecule_counts)),
+                                  molecule_type = row.names(molecule_counts),
+                                  time = as.numeric(rep(colnames(molecule_counts),
+                                                        each = nrow(molecule_counts))))
+  # Plot molecules over time
+  time_plot <- ggplot(data = molecules_time_df,
+                      aes(x = time, y = n_molecules,
+                          group = molecule_type,
+                          color = molecule_type)) +
+    geom_line() +
+    labs(title = title,
+         x = xaxis_label,
+         y = yaxis_label) +
+    guides(color = guide_legend(title = "Molecule Type")) +
+    scale_color_manual(labels = c(expression("mRNA (" ~ x[1] ~ ")"),
+                                  expression("Protein (" ~ x[2] ~ ")"),
+                                  expression("Protein (" ~ x[3] ~ ")")),
+                       values = plot_colours)
+  
+  if (!is.na(xlimits)) {
+    # Set x-axis limits
+    time_plot <- time_plot + scale_x_continuous(limits = xlimits)
+  }
+  if (!is.na(ylimits)) {
+    # Set y-axis limits
+    time_plot <- time_plot + scale_y_continuous(limits = ylimits)
+  }
+  
+  return(time_plot)
+}
 
-param_id <- 14
-molecule_counts <- search_results$sim_results[[param_id]]$molecules_over_time
-selected_reactions <- search_results$sim_results[[param_id]]$reaction_trace
-molecule_counts <- rbind(molecule_counts, sqrt(apply(molecule_counts, 2, function(x) prod(unlist(x)))))
-row.names(molecule_counts) <- c(row.names(molecule_counts)[1:nrow(molecule_counts)-1], "geometric_average")
-simulation_stats <- search_results$stats_results[[param_id]]
+# Create plots of molecules over time
+time_plot_A <- timePlot(sim_A$molecules_over_time, 
+                        title = "Function A",
+                        xlimits = c(0, 2100),
+                        ylimits = c(0, 300))
 
-# Convert data into form for plotting
-molecules_time_df <- data.frame(n_molecules = unlist(c(molecule_counts)),
-                                molecule_type = row.names(molecule_counts),
-                                time = as.numeric(rep(colnames(molecule_counts),
-                                                      each = nrow(molecule_counts))),
-                                reaction_type = as.factor(rep(c(NA, selected_reactions),
-                                                              each = nrow(molecule_counts))))
+time_plot_B <- timePlot(sim_B$molecules_over_time,
+                        title = "Function B",
+                        xlimits = c(0, 2100),
+                        ylimits = c(0, 300))
 
-# Plot molecules over time
-ggplot(data = molecules_time_df, aes(x = time, y = n_molecules,
-                                     group = molecule_type,
-                                     color = molecule_type)) +
-  geom_line() +
-  labs(title = "Number of Molecules Over Time",
-       subtitle = paste("Efficiency: ", signif(simulation_stats$efficiency_exact, digits = 3), "\n",
-                        "Normalised variance", ": ", signif(simulation_stats$normalised_variance, digits = 3), "\n",
-                        "Normalised covariance", ": ", signif(simulation_stats$normalised_covariance, digits = 3),
-                        sep = ""),
-       x = "Time (s)",
-       y = "Number of Molecules") +
-  guides(color = guide_legend(title = "Molecule Type")) +
-  scale_color_manual(labels = c(expression(sqrt(x[1] * x[2])), expression(x[1]), expression(x[2])),
-                     values = c("red", "deepskyblue", "purple"))
+# Save as subplots
+pdf("Molecules_Over_Time.pdf", width = 18, height = 8)
+time_subplots <- ggarrange(time_plot_A , time_plot_B, nrow = 2, widths = c(1, 1),
+                           common.legend = TRUE, legend = "right")
+annotate_figure(time_subplots, top = text_grob("Molecules Over Time", 
+                                               face = "bold", size = 14))
+dev.off()
+
 
 # Test different parameters
-parameterSearch <- function(test_lambdas, test_betas, test_Cs, X, deltas, rates,
-                            N = 50000, flux_threshold = 0.1, stop_at_stationary = FALSE,
+parameterSearch <- function(test_lambdas_1 = c(1), test_lambdas_2 = c(1),
+                            test_betas_1 = c(1), test_betas_2 = c(1),
+                            test_Ks = c(NA), X, deltas, rates, N = 50000,
+                            flux_threshold = 0.1, stop_at_stationary = FALSE,
                             min_N = 10000, verbose = 0) {
   
   # Record parameters and their results
@@ -291,38 +314,44 @@ parameterSearch <- function(test_lambdas, test_betas, test_Cs, X, deltas, rates,
   id <- 0
   
   # Test each parameter combination
-  for (l in test_lambdas) {
-    for (b in test_betas) {
-      for (c in test_Cs) {
-        
-        id <- id + 1
-        
-        # Record the lambda, beta and C
-        parameter_combination <- rbind(parameter_combination,
-                                       data.frame(lambda = l,
-                                                  beta = b,
-                                                  C = c))
-        
-        # Run the Gillespie algorithm
-        test_simulation <- gillespie(X = X_initial,
-                                     rate_constants = list(lambda = l, beta = b, C = c),
-                                     deltas = deltas,
-                                     rates = rates,
-                                     N = N,
-                                     flux_threshold = flux_threshold,
-                                     stop_at_stationary = stop_at_stationary,
-                                     min_N = min_N,
-                                     verbose = verbose)
-        
-        # Calculate efficiency for the simulation
-        stats <- calculateStats(X_over_time = test_simulation$molecules_over_time,
-                                rate_constants = list(lambda = l, beta = b, C = c),
-                                jump_times = test_simulation$jump_times)
-        
-        # Record the results for the parameter combination
-        sim_results[[id]] <- test_simulation
-        stats_results[[id]] <- stats
-        
+  for (l1 in test_lambdas_1) {
+    for (l2 in test_lambdas_2) {
+      for (b1 in test_betas_1) {
+        for (b2 in test_betas_2) {
+          for (k in test_Ks) {
+            # Set unique ID
+            id <- id + 1
+            
+            new_params <- list(lambda_1 = l1,
+                               lambda_2 = l2,
+                               beta_1 = b1,
+                               beta_2 = b2,
+                               K = k)
+            
+            # Record the lambdas, betas and K
+            parameter_combination <- rbind(parameter_combination, new_params)
+            
+            # Run the Gillespie algorithm
+            test_simulation <- gillespie(X = X_initial,
+                                         rate_constants = new_params,
+                                         deltas = deltas,
+                                         rates = rates,
+                                         N = N,
+                                         flux_threshold = flux_threshold,
+                                         stop_at_stationary = stop_at_stationary,
+                                         min_N = min_N,
+                                         verbose = verbose)
+            
+            # Calculate normalised variance and covariances
+            stats <- calculateStats(X_over_time = test_simulation$molecules_over_time,
+                                    rate_constants = list(lambda = l, beta = b, C = c),
+                                    jump_times = test_simulation$jump_times)
+            
+            # Record the results for the parameter combination
+            sim_results[[id]] <- test_simulation
+            stats_results[[id]] <- stats
+          }
+        }
       }
     }
   }
@@ -333,9 +362,8 @@ parameterSearch <- function(test_lambdas, test_betas, test_Cs, X, deltas, rates,
 }
 
 # Parameters to test
-test_lambdas <- c(1)
-test_betas <- c(0, 0.00001, 0.00005, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1)
-test_Cs <- test_betas / 1000
+test_lambdas_1 <- c(10, 20, 30, 40, 50, 60, 70, 80)
+test_Ks <- test_lambdas_1
 
 # Test different combinations of parameters and return the results of each
 search_results <- parameterSearch(test_lambdas = test_lambdas, 
@@ -344,7 +372,7 @@ search_results <- parameterSearch(test_lambdas = test_lambdas,
                                   X = X_initial,
                                   deltas = reaction_deltas,
                                   rates = reaction_rates,
-                                  N = 1000000)
+                                  N = 1000)
 
 setwd("C:/Users/redds/Documents/GitHub/SystemsBiologyGroup")
 
