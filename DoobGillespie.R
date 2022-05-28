@@ -436,79 +436,110 @@ search_results <- parameterSearch(test_lambdas_1 = test_lambdas_1,
 # saveRDS(search_B, file = "function_B_search2.rds")
 
 # Open parameter search results for functions (a) and (b)
-search_A <- readRDS(file = "function_A_search.rds")
-search_B <- readRDS(file = "function_B_search.rds")
+search_A <- readRDS(file = "function_A_search_new.rds")
+search_B <- readRDS(file = "function_B_search_new.rds")
 
-### Update incorrect stats for B
+# ## Update incorrect stats for B
 # params_B <- list()
 # stats_results_B <- list()
 # 
-# for (r in 1:length(search_B$sim_results)) {
-#   params_B[[r]] = list(lambda_1 = search_B$parameter_stats[r, "lambda_1"],
-#                        lambda_2 = search_B$parameter_stats[r, "lambda_2"],
-#                        beta_1 = search_B$parameter_stats[r, "beta_1"],
-#                        beta_2 = search_B$parameter_stats[r, "beta_2"],
-#                        K = search_B$parameter_stats[r, "K"])
-#   stats_results_B[[r]] <- calculateStats(X_over_time = search_B$sim_results[[r]]$molecules_over_time,
+# for (r in 1:length(search_A$sim_results)) {
+#   params_B[[r]] = list(lambda_1 = search_A$parameter_stats[r, "lambda_1"],
+#                        lambda_2 = search_A$parameter_stats[r, "lambda_2"],
+#                        beta_1 = search_A$parameter_stats[r, "beta_1"],
+#                        beta_2 = search_A$parameter_stats[r, "beta_2"],
+#                        K = search_A$parameter_stats[r, "K"])
+#   stats_results_B[[r]] <- calculateStats(X_over_time = search_A$sim_results[[r]]$molecules_over_time,
 #                                          rate_constants = params_B[[r]],
-#                                          jump_times = search_B$sim_results[[r]]$jump_times,
-#                                          function_type = "B")
+#                                          jump_times = search_A$sim_results[[r]]$jump_times,
+#                                          function_type = "A")
 # }
 # 
-# parameter_stats_B <- cbind(do.call(rbind.data.frame, params_B), do.call(rbind, stats_results_B))
-# parameter_stats_B <- data.frame(lapply(parameter_stats_B, as.numeric))
+# numeric_stats <- cbind(do.call(rbind.data.frame, params_B),
+#                            do.call(rbind, lapply(stats_results_B, function(x) x$numerical)))
+# numeric_stats <- data.frame(lapply(numeric_stats, as.numeric))
+# analytic_stats <- cbind(do.call(rbind.data.frame, params_B),
+#                         do.call(rbind, lapply(stats_results_B, function(x) x$analytical)))
+# analytic_stats <- data.frame(lapply(analytic_stats, as.numeric))
 # 
-# search_B$parameter_stats <- parameter_stats_B
-# saveRDS(search_B, file = "function_B_search.rds")
-###
+# search_A$numerical_stats <- numeric_stats
+# search_A$analytical_stats <- analytic_stats
+# 
+# saveRDS(search_B, file = "function_B_search_new.rds")
 
-rps <- as.list(search_A$parameter_stats[1,][1:5])
-rps <- lapply(rps, as.numeric)
+# rps <- as.list(search_A$parameter_stats[1,][1:5])
+# rps <- lapply(rps, as.numeric)
+# 
+# calculateStats(X_over_time = search_A$sim_results[[1]]$molecules_over_time,
+#                rate_constants = rps,
+#                jump_times = search_B$sim_results[[r]]$jump_times,
+#                function_type = "A")
 
-calculateStats(X_over_time = search_A$sim_results[[1]]$molecules_over_time,
-               rate_constants = rps,
-               jump_times = search_B$sim_results[[r]]$jump_times,
-               function_type = "A")
 
-search_A_stats <- search_A$parameter_stats
-search_B_stats <- search_B$parameter_stats
+plotCovariance <- function(points_A, points_B, no_outliers_A, no_outliers_B) {
+  # Combine eta values for each function into a dataframe
+  combined_stats <- rbind(points_A, points_B)
+  combined_stats$func <- c(rep("A", nrow(points_A)),
+                           rep("B", nrow(points_B)))
+  
+  no_outlier_stats <- rbind(no_outliers_A, no_outliers_B)
+  no_outlier_stats$func <- c(rep("A", nrow(no_outliers_A)),
+                             rep("B", nrow(no_outliers_B)))
+  
+  # Plot eta 11 and eta 12
+  var_covar_plot <- ggplot(data = combined_stats, mapping = aes(x = eta_11, y = eta_12,
+                                         color = func, shape = func)) +
+    geom_point(data = combined_stats, size = 2, alpha = 0.5) +
+    labs(title = expression("Normalized Variance " ~ eta[11] ~ "and Normalized Covariance" ~ eta[12]),
+         x = expression(eta[11]),
+         y = expression(eta[12])) +
+    guides(color = guide_legend(title = expression("Function " ~ f(x[1]))),
+           shape = guide_legend(title = expression("Function " ~ f(x[1])))) +
+    scale_color_manual(labels = c(expression(lambda[1] ~ "          "),
+                                  expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                       values = c("#fc9803", "#248aff")) +
+    scale_shape_manual(labels = c(expression(lambda[1] ~ "          "),
+                                  expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                       values = c(19, 17)) +
+    geom_smooth(data = no_outlier_stats, method = "lm", se = FALSE)
+  
+  # Plot eta 12 and eta 23
+  covar_plot <- ggplot(combined_stats, aes(x = eta_12, y = eta_23,
+                                           color = func, shape = func)) +
+    geom_point(size = 2, alpha = 0.5) +
+    labs(title = expression("Normalized Covariances " ~ eta[12] ~ "and" ~ eta[23]),
+         x = expression(eta[12]),
+         y = expression(eta[23])) +
+    guides(color = guide_legend(title = expression("Function " ~ f(x[1]))),
+           shape = guide_legend(title = expression("Function " ~ f(x[1])))) +
+    scale_color_manual(labels = c(expression(lambda[1] ~ "          "),
+                                  expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                       values = c("#fc9803", "#248aff")) +
+    scale_shape_manual(labels = c(expression(lambda[1] ~ "          "),
+                                  expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                       values = c(19, 17)) +
+    geom_smooth(data = no_outlier_stats, method = "lm", se = FALSE)
+  
+  covar_subplots <- ggarrange(var_covar_plot, covar_plot, nrow = 1,
+                              widths = c(1, 1), common.legend = TRUE,
+                              legend = "right")
+  
+  return(covar_subplots)
+}
 
-# Combine eta values for each function into a dataframe
-combined_stats <- rbind(search_A_stats, search_B_stats)
-combined_stats$func <- c(rep("A", nrow(search_A_stats)),
-                         rep("B", nrow(search_B_stats)))
+analytical_subplots <- plotCovariance(points_A = search_A$analytical_stats,
+                                      points_B = search_B$analytical_stats,
+                                      no_outliers_A = search_A$analytical_stats,
+                                      no_outliers_B = search_B$analytical_stats)
+numeric_subplots <- plotCovariance(points_A = search_A$numerical_stats,
+                                   points_B = search_B$numerical_stats,
+                                   no_outliers_A = search_A$numerical_stats[which(search_A$numerical_stats$eta_12 > 0),],
+                                   no_outliers_B = search_B$numerical_stats[which(search_B$numerical_stats$eta_12 > 0),])
 
-# Plot eta 11 and eta 12
-var_covar_plot <- ggplot(combined_stats, aes(x = eta_11, y = eta_12,
-                                             color = func, shape = func)) +
-  geom_point(size = 2, alpha = 0.5) +
-  labs(title = expression("Normalized Variance " ~ eta[11] ~ "and Normalized Covariance" ~ eta[12]),
-       x = expression(eta[11]),
-       y = expression(eta[12])) +
-  guides(color = guide_legend(title = expression("Function " ~ f(x[1]))),
-         shape = guide_legend(title = expression("Function " ~ f(x[1])))) +
-  scale_color_manual(labels = c(expression(lambda[1] ~ "          "),
-                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
-                     values = c("#fc9803", "#248aff")) +
-  scale_shape_manual(labels = c(expression(lambda[1] ~ "          "),
-                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
-                     values = c(19, 17))
-
-# Plot eta 12 and eta 23
-covar_plot <- ggplot(combined_stats, aes(x = eta_12, y = eta_23,
-                                             color = func, shape = func)) +
-  geom_point(size = 2, alpha = 0.5) +
-  labs(title = expression("Normalized Covariances " ~ eta[12] ~ "and" ~ eta[23]),
-       x = expression(eta[12]),
-       y = expression(eta[23])) +
-  guides(color = guide_legend(title = expression("Function " ~ f(x[1]))),
-         shape = guide_legend(title = expression("Function " ~ f(x[1])))) +
-  scale_color_manual(labels = c(expression(lambda[1] ~ "          "),
-                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
-                     values = c("#fc9803", "#248aff")) +
-  scale_shape_manual(labels = c(expression(lambda[1] ~ "          "),
-                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
-                     values = c(19, 17))
+annotate_figure(analytical_subplots, top = text_grob("Analytical Results", 
+                                                     face = "bold", size = 14))
+annotate_figure(numeric_subplots, top = text_grob("Numerical Results", 
+                                                  face = "bold", size = 14))
 
 # Combine as subplots and save
 pdf("Covariance_Plots.pdf", width = 13, height = 9)
