@@ -482,6 +482,7 @@ plotCovariance <- function(points_A, points_B, no_outliers_A, no_outliers_B) {
   combined_stats$func <- c(rep("A", nrow(points_A)),
                            rep("B", nrow(points_B)))
   
+  # Create dataframe for trend line in which outliers are removed
   no_outlier_stats <- rbind(no_outliers_A, no_outliers_B)
   no_outlier_stats$func <- c(rep("A", nrow(no_outliers_A)),
                              rep("B", nrow(no_outliers_B)))
@@ -489,7 +490,7 @@ plotCovariance <- function(points_A, points_B, no_outliers_A, no_outliers_B) {
   # Plot eta 11 and eta 12
   var_covar_plot <- ggplot(data = combined_stats, mapping = aes(x = eta_11, y = eta_12,
                                          color = func, shape = func)) +
-    geom_point(data = combined_stats, size = 2, alpha = 0.5) +
+    geom_point(data = combined_stats, size = 2.5, alpha = 0.5) +
     labs(title = expression("Normalized Variance " ~ eta[11] ~ "and Normalized Covariance" ~ eta[12]),
          x = expression(eta[11]),
          y = expression(eta[12])) +
@@ -506,7 +507,7 @@ plotCovariance <- function(points_A, points_B, no_outliers_A, no_outliers_B) {
   # Plot eta 12 and eta 23
   covar_plot <- ggplot(combined_stats, aes(x = eta_12, y = eta_23,
                                            color = func, shape = func)) +
-    geom_point(size = 2, alpha = 0.5) +
+    geom_point(size = 2.5, alpha = 0.5) +
     labs(title = expression("Normalized Covariances " ~ eta[12] ~ "and" ~ eta[23]),
          x = expression(eta[12]),
          y = expression(eta[23])) +
@@ -520,6 +521,7 @@ plotCovariance <- function(points_A, points_B, no_outliers_A, no_outliers_B) {
                        values = c(19, 17)) +
     geom_smooth(data = no_outlier_stats, method = "lm", se = FALSE)
   
+  # combine into subplots
   covar_subplots <- ggarrange(var_covar_plot, covar_plot, nrow = 1,
                               widths = c(1, 1), common.legend = TRUE,
                               legend = "right")
@@ -527,22 +529,31 @@ plotCovariance <- function(points_A, points_B, no_outliers_A, no_outliers_B) {
   return(covar_subplots)
 }
 
+# Remove outlier points
+search_A_filtered <- search_A$numerical_stats[which(search_A$numerical_stats$eta_12 > 0),]
+search_B_filtered <- search_B$numerical_stats[which(search_B$numerical_stats$eta_12 > 0),]
+
+# Perform linear regression to find equation of line of best fit
+lm(eta_23 ~ eta_12, data = search_A_filtered)$coefficients
+lm(eta_23 ~ eta_12, data = search_B_filtered)$coefficients
+
+# Create separate plots for analytical and numeric etas
 analytical_subplots <- plotCovariance(points_A = search_A$analytical_stats,
                                       points_B = search_B$analytical_stats,
                                       no_outliers_A = search_A$analytical_stats,
                                       no_outliers_B = search_B$analytical_stats)
 numeric_subplots <- plotCovariance(points_A = search_A$numerical_stats,
                                    points_B = search_B$numerical_stats,
-                                   no_outliers_A = search_A$numerical_stats[which(search_A$numerical_stats$eta_12 > 0),],
-                                   no_outliers_B = search_B$numerical_stats[which(search_B$numerical_stats$eta_12 > 0),])
+                                   no_outliers_A = search_A_filtered,
+                                   no_outliers_B = search_B_filtered)
 
+# Save subplots
+pdf("Analytical_Covariance.pdf", width = 13, height = 7)
 annotate_figure(analytical_subplots, top = text_grob("Analytical Results", 
                                                      face = "bold", size = 14))
+dev.off()
+
+pdf("Numeric_Covariance.pdf", width = 13, height = 7)
 annotate_figure(numeric_subplots, top = text_grob("Numerical Results", 
                                                   face = "bold", size = 14))
-
-# Combine as subplots and save
-pdf("Covariance_Plots.pdf", width = 13, height = 9)
-ggarrange(var_covar_plot, covar_plot, nrow = 1, widths = c(1, 1),
-          common.legend = TRUE, legend = "right")
 dev.off()
