@@ -4,13 +4,10 @@ library(SciViews)
 library(ggplot2)
 library(stringr)
 library(ggpubr)
-library(scales)
-library(reshape)
-library(modi)
 
 # Set seed for reproducability
 set.seed(123)
-# Sed directory
+# Set directory
 setwd("C:/Users/redds/Documents/GitHub/Gillespie")
 
 func <- "B"
@@ -66,17 +63,16 @@ calculateJumpTime <- function(rT) {
   return(jump_time)
 }
 
-# Calculate normalised variation, covariance and whether stationarity is reached
-calculateStats <- function(X_over_time, rate_constants, jump_times) {
-  CV_norm <- NA
-  covar_norm <- NA
+# Calculate normalised variation and covariance
+calculateStats <- function(X_over_time, rate_constants, jump_times,
+                           function_type = "A") {
   
   # Extract the rate constant parameters
   lambda_1 <- rate_constants$lambda_1
-  K <- rate_constants$K
-  beta_1 <- rate_constants$beta_1
   lambda_2 <- rate_constants$lambda_2
+  beta_1 <- rate_constants$beta_1
   beta_2 <- rate_constants$beta_2
+  K <- rate_constants$K
   
   # Calculate the average number of x1, x2 and x3 molecules
   x_averages <- list()
@@ -85,15 +81,41 @@ calculateStats <- function(X_over_time, rate_constants, jump_times) {
     x_averages[[x]] <- weighted.mean(x = unlist(X_over_time[x,]), w = jump_times)
   }
   
-  # Calculate normalised variance
-  eta_11 <- 1 / x_averages[["x1"]]
+  # Calculate analytic etas
+  if (toupper(function_type) == "A") {
+    # Calculate normalised variance for function (a)
+    eta_11 <- 1 / x_averages[["x1"]]
+    
+    # Normalised co-variance
+    eta_12 <- eta_11 * (beta_2 / (beta_1 + beta_2))
+    eta_23 <- eta_12
+    
+  } else {
+    # Calculate placeholder alpha for function (b)
+    alpha <- x_averages[["x1"]] / (K + x_averages[["x1"]])
+    
+    eta_11 <- 1 / (x_averages[["x1"]] + alpha)
+    eta_12 <- eta_11 * (beta_2 / (beta_1 + (beta_1 * alpha) + beta_2))
+    eta_23 <- eta_12
+  }
   
-  # Normalised co-variance
-  eta_12 <- eta_11 + (beta_2 / (beta_1 + beta_2))
+  # Calculate weighted covariance between x1, x2 and x3 molecules
+  abundance_df <- data.frame(t(X_over_time))
+  abundance_df <- data.frame(lapply(abundance_df, as.numeric))
+  molecule_cov <- cov.wt(abundance_df, as.vector(jump_times))$cov
+  
+  # Calculate numeric etas
+  num_eta11 <- molecule_cov["x1", "x1"] / (x_averages[["x1"]] * x_averages[["x1"]])
+  num_eta12 <- molecule_cov["x1", "x2"] / (x_averages[["x1"]] * x_averages[["x2"]])
+  num_eta23 <- molecule_cov["x2", "x3"] / (x_averages[["x2"]] * x_averages[["x3"]])
   
   # Record results
-  results <- list(eta_11 = eta_11,
-                  eta_12 = eta_12)
+  results <- list(analytical = list(eta_11 = eta_11,
+                                    eta_12 = eta_12,
+                                    eta_23 = eta_23),
+                  numerical = list(eta_11 = num_eta11,
+                                   eta_12 = num_eta12,
+                                   eta_23 = num_eta23))
   
   return(results)
 }
@@ -227,8 +249,6 @@ simulation_results <- gillespie(X = X_initial,
                                 min_N = 1000,
                                 verbose = 1)
 
-message(signif(mean(unlist(simulation_results$molecules_over_time["x1",])), 5))
-
 # saveRDS(simulation_results, file = "sim_A.rds")
 # saveRDS(simulation_results, file = "sim_B.rds")
 
@@ -236,10 +256,20 @@ message(signif(mean(unlist(simulation_results$molecules_over_time["x1",])), 5))
 sim_A <- readRDS(file = "sim_A.rds")
 sim_B <- readRDS(file = "sim_B.rds")
 
+# Display average molecule abundance
+message(paste("Average <x1>:", signif(mean(unlist(sim_A$molecules_over_time["x1",])), 5)))
+message(paste("Average <x2>:", signif(mean(unlist(sim_A$molecules_over_time["x2",])), 5)))
+message(paste("Average <x3>:", signif(mean(unlist(sim_A$molecules_over_time["x3",])), 5)))
+
+message(paste("Average <x1>:", signif(mean(unlist(sim_B$molecules_over_time["x1",])), 5)))
+message(paste("Average <x2>:", signif(mean(unlist(sim_B$molecules_over_time["x2",])), 5)))
+message(paste("Average <x3>:", signif(mean(unlist(sim_B$molecules_over_time["x3",])), 5)))
+
 # Calculate efficiency for the simulation
 simulation_stats <- calculateStats(X_over_time = simulation_results$molecules_over_time,
                                    rate_constants = rate_parameters,
-                                   jump_times = simulation_results$jump_times)
+                                   jump_times = simulation_results$jump_times,
+                                   function_type = func)
 
 # Create plot of molecule abundance over time
 timePlot <- function(molecule_counts, plot_colours = c("red", "deepskyblue", "purple"),
@@ -291,19 +321,19 @@ time_plot_B <- timePlot(sim_B$molecules_over_time,
 
 # Save as subplots
 pdf("Molecules_Over_Time.pdf", width = 18, height = 8)
-time_subplots <- ggarrange(time_plot_A , time_plot_B, nrow = 2, widths = c(1, 1),
+time_subplots <- ggarrange(time_plot_A, time_plot_B, nrow = 2, widths = c(1, 1),
                            common.legend = TRUE, legend = "right")
 annotate_figure(time_subplots, top = text_grob("Molecules Over Time", 
                                                face = "bold", size = 14))
 dev.off()
-
 
 # Test different parameters
 parameterSearch <- function(test_lambdas_1 = c(1), test_lambdas_2 = c(1),
                             test_betas_1 = c(1), test_betas_2 = c(1),
                             test_Ks = c(NA), X, deltas, rates, N = 50000,
                             flux_threshold = 0.1, stop_at_stationary = FALSE,
-                            min_N = 10000, verbose = 0) {
+                            min_N = 10000, function_type = "A", verbose = 0,
+                            previous_search_stats = data.frame()) {
   
   # Record parameters and their results
   parameter_combination <- data.frame()
@@ -319,8 +349,6 @@ parameterSearch <- function(test_lambdas_1 = c(1), test_lambdas_2 = c(1),
       for (b1 in test_betas_1) {
         for (b2 in test_betas_2) {
           for (k in test_Ks) {
-            # Set unique ID
-            id <- id + 1
             
             new_params <- list(lambda_1 = l1,
                                lambda_2 = l2,
@@ -328,72 +356,162 @@ parameterSearch <- function(test_lambdas_1 = c(1), test_lambdas_2 = c(1),
                                beta_2 = b2,
                                K = k)
             
-            # Record the lambdas, betas and K
-            parameter_combination <- rbind(parameter_combination, new_params)
+            # Check whether combination was tested previously in a different run
+            continue_search <- TRUE
             
-            # Run the Gillespie algorithm
-            test_simulation <- gillespie(X = X_initial,
-                                         rate_constants = new_params,
-                                         deltas = deltas,
-                                         rates = rates,
-                                         N = N,
-                                         flux_threshold = flux_threshold,
-                                         stop_at_stationary = stop_at_stationary,
-                                         min_N = min_N,
-                                         verbose = verbose)
+            if (nrow(previous_search_stats) > 0) {
+              if (nrow(merge(new_params, previous_search_stats)) > 0) {
+                continue_search <- FALSE
+              }
+            }
             
-            # Calculate normalised variance and covariances
-            stats <- calculateStats(X_over_time = test_simulation$molecules_over_time,
-                                    rate_constants = list(lambda = l, beta = b, C = c),
-                                    jump_times = test_simulation$jump_times)
-            
-            # Record the results for the parameter combination
-            sim_results[[id]] <- test_simulation
-            stats_results[[id]] <- stats
+            if (continue_search) {
+              # Set unique ID
+              id <- id + 1
+              
+              if (verbose > 0) {
+                message(paste("Reached step", id))
+                message(paste("Testing", toString(new_params)))
+              }
+              
+              # Record the lambdas, betas and K
+              parameter_combination <- rbind(parameter_combination, new_params)
+              
+              # Run the Gillespie algorithm
+              test_simulation <- gillespie(X = X_initial,
+                                           rate_constants = new_params,
+                                           deltas = deltas,
+                                           rates = rates,
+                                           N = N,
+                                           flux_threshold = flux_threshold,
+                                           stop_at_stationary = stop_at_stationary,
+                                           min_N = min_N)
+              
+              # Calculate normalised variance and covariances
+              stats <- calculateStats(X_over_time = test_simulation$molecules_over_time,
+                                      rate_constants = new_params,
+                                      jump_times = test_simulation$jump_times,
+                                      function_type = function_type)
+              
+              # Record the results for the parameter combination
+              sim_results[[id]] <- test_simulation
+              stats_results[[id]] <- stats
+            }
           }
         }
       }
     }
   }
   
+  # Combine parameters with stats
+  parameter_stats <- cbind(parameter_combination, do.call(rbind, stats_results))
+  parameter_stats <- data.frame(lapply(parameter_stats, as.numeric))
+  
   return(list(sim_results = sim_results,
-              stats_results = stats_results,
-              parameter_combination = parameter_combination))
+              parameter_stats = parameter_stats))
 }
 
-# Parameters to test
-test_lambdas_1 <- c(10, 20, 30, 40, 50, 60, 70, 80)
-test_Ks <- test_lambdas_1
+if (toupper(func) == "A") {
+  # Parameters to test
+  test_lambdas_1 <- c((1:10)/10, (1:50)*2)
+  test_Ks <- NA
+} else {
+  test_lambdas_1 <- c(0.1, 0.5, 1, 5, 10, 20, 50, 100)
+  test_Ks <- test_lambdas_1
+}
 
 # Test different combinations of parameters and return the results of each
-search_results <- parameterSearch(test_lambdas = test_lambdas, 
-                                  test_betas = test_betas,
-                                  test_Cs = test_Cs,
+search_results <- parameterSearch(test_lambdas_1 = test_lambdas_1, 
+                                  test_lambdas_2 = c(1),
+                                  test_betas_1 = c(1),
+                                  test_betas_2 = c(0.1),
+                                  test_Ks = test_Ks,
                                   X = X_initial,
                                   deltas = reaction_deltas,
                                   rates = reaction_rates,
-                                  N = 1000)
+                                  N = 100000,
+                                  function_type = "B",
+                                  verbose = 1)
 
-setwd("C:/Users/redds/Documents/GitHub/SystemsBiologyGroup")
+# saveRDS(search_B, file = "function_B_search2.rds")
 
-# Save results to file
-# saveRDS(search_results, file = "parameter_test_results.rds")
-search_results <- readRDS("parameter_test_results_100000_final.rds")
+# Open parameter search results for functions (a) and (b)
+search_A <- readRDS(file = "function_A_search.rds")
+search_B <- readRDS(file = "function_B_search.rds")
 
-# Get the simulation time trace
-parameter_sims <- search_results$sim_results
-# Combine lambda, beta, C data with stats
-parameter_stats_df <- cbind(search_results$parameter_combination,
-                            do.call(rbind, search_results$stats_results))
-# Convert columns from list to numeric and logical
-parameter_stats_df[c(4:7)] <- lapply(parameter_stats_df[c(4:7)], as.numeric)
-parameter_stats_df[c(8)] <- lapply(parameter_stats_df[c(8)], as.logical)
-# Covert C to an ordered factor
-parameter_stats_df$C <- factor(parameter_stats_df$C, levels = unique(parameter_stats_df$C))
+### Update incorrect stats for B
+# params_B <- list()
+# stats_results_B <- list()
+# 
+# for (r in 1:length(search_B$sim_results)) {
+#   params_B[[r]] = list(lambda_1 = search_B$parameter_stats[r, "lambda_1"],
+#                        lambda_2 = search_B$parameter_stats[r, "lambda_2"],
+#                        beta_1 = search_B$parameter_stats[r, "beta_1"],
+#                        beta_2 = search_B$parameter_stats[r, "beta_2"],
+#                        K = search_B$parameter_stats[r, "K"])
+#   stats_results_B[[r]] <- calculateStats(X_over_time = search_B$sim_results[[r]]$molecules_over_time,
+#                                          rate_constants = params_B[[r]],
+#                                          jump_times = search_B$sim_results[[r]]$jump_times,
+#                                          function_type = "B")
+# }
+# 
+# parameter_stats_B <- cbind(do.call(rbind.data.frame, params_B), do.call(rbind, stats_results_B))
+# parameter_stats_B <- data.frame(lapply(parameter_stats_B, as.numeric))
+# 
+# search_B$parameter_stats <- parameter_stats_B
+# saveRDS(search_B, file = "function_B_search.rds")
+###
 
-# Calculate normalised standard deviation
-parameter_stats_df$normalised_sd <- sqrt(parameter_stats_df$normalised_variance)
+rps <- as.list(search_A$parameter_stats[1,][1:5])
+rps <- lapply(rps, as.numeric)
 
-# Calculate the absolute mean difference between fluxes <R+> - <R-> for each molecule
-parameter_stats_df$mean_flux_diff <- abs(unlist(lapply(parameter_stats_df$flux_differences,
-                                                       function(x) mean(unlist(x)))))
+calculateStats(X_over_time = search_A$sim_results[[1]]$molecules_over_time,
+               rate_constants = rps,
+               jump_times = search_B$sim_results[[r]]$jump_times,
+               function_type = "A")
+
+search_A_stats <- search_A$parameter_stats
+search_B_stats <- search_B$parameter_stats
+
+# Combine eta values for each function into a dataframe
+combined_stats <- rbind(search_A_stats, search_B_stats)
+combined_stats$func <- c(rep("A", nrow(search_A_stats)),
+                         rep("B", nrow(search_B_stats)))
+
+# Plot eta 11 and eta 12
+var_covar_plot <- ggplot(combined_stats, aes(x = eta_11, y = eta_12,
+                                             color = func, shape = func)) +
+  geom_point(size = 2, alpha = 0.5) +
+  labs(title = expression("Normalized Variance " ~ eta[11] ~ "and Normalized Covariance" ~ eta[12]),
+       x = expression(eta[11]),
+       y = expression(eta[12])) +
+  guides(color = guide_legend(title = expression("Function " ~ f(x[1]))),
+         shape = guide_legend(title = expression("Function " ~ f(x[1])))) +
+  scale_color_manual(labels = c(expression(lambda[1] ~ "          "),
+                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                     values = c("#fc9803", "#248aff")) +
+  scale_shape_manual(labels = c(expression(lambda[1] ~ "          "),
+                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                     values = c(19, 17))
+
+# Plot eta 12 and eta 23
+covar_plot <- ggplot(combined_stats, aes(x = eta_12, y = eta_23,
+                                             color = func, shape = func)) +
+  geom_point(size = 2, alpha = 0.5) +
+  labs(title = expression("Normalized Covariances " ~ eta[12] ~ "and" ~ eta[23]),
+       x = expression(eta[12]),
+       y = expression(eta[23])) +
+  guides(color = guide_legend(title = expression("Function " ~ f(x[1]))),
+         shape = guide_legend(title = expression("Function " ~ f(x[1])))) +
+  scale_color_manual(labels = c(expression(lambda[1] ~ "          "),
+                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                     values = c("#fc9803", "#248aff")) +
+  scale_shape_manual(labels = c(expression(lambda[1] ~ "          "),
+                                expression("  " ~ lambda[1] ~ frac(K, (K + x[1])))),
+                     values = c(19, 17))
+
+# Combine as subplots and save
+pdf("Covariance_Plots.pdf", width = 13, height = 9)
+ggarrange(var_covar_plot, covar_plot, nrow = 1, widths = c(1, 1),
+          common.legend = TRUE, legend = "right")
+dev.off()
