@@ -27,3 +27,5 @@ The Gillespie algorithm was implemented in R and run to simulate two situations 
       <li>Whereby mRNA self-repressive as its transcription is inversly proportional to its own concentration $(x_{1})$ and a rate constant $K$</li>
     </ul>
 </ol>
+
+For both functions, rate constants were set with $\beta_{1} = \lambda_{2} = 1$ and $\beta_{2} = 0.1$. To ensure that $\left\langle x_{2} \right\rangle \simeq 20$, $\lambda_{1}$ and $K$ were determined below for functions (a) and (b). These were calculated using the principal that at stationarity, $\left\langle R^{+} \right\rangle = \left\langle R^{-} \right\rangle$.
