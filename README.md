@@ -19,5 +19,11 @@ The Gillespie algorithm was implemented in R and run to simulate two situations 
 
 <ol type="a">
   <li>$f(x_{1}) = \lambda_{1}$</li>
-  <li>$f(x_{1}) = \lambda_{1} \frac{K}{K + x_{1}}$, which introduces self-repression of the mRNA ($x_{1}$) and a rate constant K</li>
+    <ul>
+      <li>Whereby mRNA is transcribed at a constant rate</li>
+    </ul>
+  <li>$f(x_{1}) = \lambda_{1} \frac{K}{K + x_{1}}$</li>
+    <ul>
+      <li>Whereby mRNA self-repressive as its transcription is inversly proportional to its own concentration $(x_{1})$ and a rate constant $K$</li>
+    </ul>
 </ol>
