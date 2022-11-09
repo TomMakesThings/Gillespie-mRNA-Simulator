@@ -1,0 +1,92 @@
+---
+title: <b>Gillespie mRNA Simulator</b>
+output: html_notebook
+---
+
+<img src="https://avatars.githubusercontent.com/u/61354833" align="left" width="70" height="70">
+
+Code by [TomMakesThings](https://github.com/TomMakesThings/Genome-Sequence-Analysis-HMM)
+
+<br><br><br>
+
+## Dual Reporter Method
+A modified gene produces two pieces of mRNA (<span style="color:#0384fc">$x_{1}$</span>) which stochastically transcribe different reporter proteins (<span style="color:blue">$x_{2}$</span>, <span style="color:#8003fc">$x_{3}$</span>), e.g. GFP and CFP, independently of one another. This dual reporter method can be modeled by the following reaction scheme:
+
+<span style="color:#0384fc">$\text{Transcription: } \text{ } x_{1} \xrightarrow[]{f(x_{1})} x_{1} + 1$</span>
+
+<span style="color:blue">$\text{Translation of } x_{2} \text{: } \text{ } x_{2} \xrightarrow[]{\lambda_{2} x_{1}} x_{2} + 1$</span>
+
+<span style="color:#8003fc">$\text{Translation of } x_{3} \text{: } x_{3} \xrightarrow[]{\lambda_{2} x_{1}} x_{3} + 1$</span>
+
+<span style="color:#0384fc">$\text{mRNA degradation: } \text{ } x_{1} \xrightarrow[]{\beta_{1} x_{1}} x_{1} - 1$</span>
+
+<span style="color:blue">$\text{Degradation of } x_{2} \text{: } x_{2} \xrightarrow[]{\beta_{2} x_{2}} x_{2} - 1$</span>
+
+<span style="color:#8003fc">$\text{Degradation of } x_{3} \text{: } x_{3} \xrightarrow[]{\beta_{2} x_{3}} x_{3} - 1$</span>
+
+<br>
+
+### mRNA Production Rate
+Two different situations are modeled, whereby mRNA transcription is either constant or self-repressive. In both, mRNA are degraded one at a time at a rate $\beta_{1} x_{1}$:
+
+<ol type="a">
+  <li><span style="color:#0384fc">$f(x_{1}) = \lambda_{1}$</span></li>
+    <ul>
+      <li>mRNA are transcribed one at a time in a Poission process at a rate $\lambda_{1}$</li>
+      <li>The chemical master equation (CME), describing the time evolution of component $x_{1}$, is simply: $\frac{d P(x_{1})}{dt} = \underbrace{\lambda_{1} (P(x_{1} - 1) - \lambda_{1} P(x_{1})}_{\text{Synthesis}} + \underbrace{\beta_{1} (x_{1} + 1) P(x_{1} + 1) - \beta x_{1} P(x_{1})}_{\text{Degradation}}$</li>
+    </ul>
+  <br>
+  <li><span style="color:#0384fc">$f(x_{1}) = \lambda_{1} \frac{K}{K + x_{1}}$</span></li>
+    <ul>
+      <li>Setting the production rate of mRNA as a function $f(x_{1})$, allows the model to incorporate positive /
+      negative feedback</li>
+      <li>In this case, mRNA is self-repressive as its transcription is inversely proportional to its own concentration
+      $(x_{1})$ and a rate constant $K$</li>
+    </ul>
+</ol>
+
+<br>
+
+### Doob-Gillespie Algorithm
+To simulate the system over time, the Doob-Gillespie algorithm was applied. The principals are as follows:
+
+<ol>
+  <li>At time $t_{0}$, initialize the system's state $X_{i} = X_{0}$</li>
+  <li>At time $t_{i}$ and state $X_{i}$, evaluate all $a_{j}(X_{i})$ and their sum $a_{j}(X_{i})$</li>
+  <li></li>
+  <li></li>
+</ol>
+
+<br>
+
+## Code Imports
+
+```{r}
+library(SciViews)
+library(ggplot2)
+library(stringr)
+library(ggpubr)
+
+# Set seed for reproducability
+set.seed(123)
+# Set working directory
+setwd("C:/Users/redds/Documents/GitHub/Gillespie")
+```
+
+## Molecule
+Set the initial number of molecules (x1, x2 and x3) and change in molecule numbers per reaction
+
+```{r}
+# Set initial number of molecules
+X_initial <- list(x1 = 50, x2 = 50, x3 = 50)
+
+# Change in molecule numbers per reaction
+reaction_deltas <- list(c(x1 = 1, x2 = 0, x3 = 0), c(x1 = -1, x2 = 0, x3 = 0),
+                        c(x1 = 0, x2 = 1, x3 = 0), c(x1 = 0, x2 = -1, x3 = 0),
+                        c(x1 = 0, x2 = 0, x3 = 1), c(x1 = 0, x2 = 0, x3 = -1))
+```
+
+```{r}
+
+```
+

@@ -10,34 +10,6 @@ set.seed(123)
 # Set directory
 setwd("C:/Users/redds/Documents/GitHub/Gillespie")
 
-func <- "B"
-
-# Set parameters for function A
-if (toupper(func) == "A") {
-  # Set rates for production, degradation and complex formation
-  rate_parameters <- list(lambda_1 = 20, beta_1 = 1, lambda_2 = 1, beta_2 = 0.1)
-  
-  # Rate formulas per reaction
-  # Values are calculated using parameters specified in the gillespie function
-  reaction_rates = c("rate_constants$lambda_1", # mRNA (x1) transcription
-                     "rate_constants$beta_1 * X[[\"x1\"]]", # mRNA (x1) degradation
-                     "rate_constants$lambda_2 * X[[\"x1\"]]", # x2 translation
-                     "rate_constants$beta_2 * X[[\"x2\"]]", # x2 degradation
-                     "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
-                     "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
-  
-} else {
-  # Set parameters for function B
-  rate_parameters <- list(lambda_1 = 30, K = 40, beta_1 = 1, lambda_2 = 1, beta_2 = 0.1)
-  
-  reaction_rates = c("rate_constants$lambda_1 * (rate_constants$K) / (rate_constants$K + X[[\"x1\"]])", # mRNA (x1) transcription
-                     "rate_constants$beta_1 * X[[\"x1\"]]", # mRNA (x1) degradation
-                     "rate_constants$lambda_2 * X[[\"x1\"]]", # x2 translation
-                     "rate_constants$beta_2 * X[[\"x2\"]]", # x2 degradation
-                     "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
-                     "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
-}
-
 # Set initial number of molecules
 X_initial <- list(x1 = 50, x2 = 50, x3 = 50)
 
@@ -239,6 +211,35 @@ gillespie <- function(X, rate_constants, deltas, rates, N = 100000,
               n_iterations = n))
 }
 
+# Test functions A and B for mRNA transcription
+for (func in c("A", "B")) {
+  # Set parameters for function A, where mRNA is transcribed at a constant rate
+  if (toupper(func) == "A") {
+    # Set rates for production, degradation and complex formation
+    rate_parameters <- list(lambda_1 = 20, beta_1 = 1, lambda_2 = 1, beta_2 = 0.1)
+    
+    # Rate formulas per reaction
+    # Values are calculated using parameters specified in the gillespie function
+    reaction_rates = c("rate_constants$lambda_1", # mRNA (x1) transcription
+                       "rate_constants$beta_1 * X[[\"x1\"]]", # mRNA (x1) degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x2 translation
+                       "rate_constants$beta_2 * X[[\"x2\"]]", # x2 degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
+                       "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
+    
+  } else {
+    # Set parameters for function B, where mRNA is self-repressed
+    rate_parameters <- list(lambda_1 = 30, K = 40, beta_1 = 1, lambda_2 = 1, beta_2 = 0.1)
+    
+    reaction_rates = c("rate_constants$lambda_1 * (rate_constants$K) / (rate_constants$K + X[[\"x1\"]])", # mRNA (x1) transcription
+                       "rate_constants$beta_1 * X[[\"x1\"]]", # mRNA (x1) degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x2 translation
+                       "rate_constants$beta_2 * X[[\"x2\"]]", # x2 degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
+                       "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
+  }
+}
+
 # Run the Gillespie algorithm
 simulation_results <- gillespie(X = X_initial,
                                 rate_constants = rate_parameters,
@@ -249,6 +250,8 @@ simulation_results <- gillespie(X = X_initial,
                                 min_N = 1000,
                                 verbose = 1)
 
+# Save simulations for each function
+# - Code above must be run for each function separately
 # saveRDS(simulation_results, file = "sim_A.rds")
 # saveRDS(simulation_results, file = "sim_B.rds")
 
@@ -256,7 +259,7 @@ simulation_results <- gillespie(X = X_initial,
 sim_A <- readRDS(file = "sim_A.rds")
 sim_B <- readRDS(file = "sim_B.rds")
 
-# Display average molecule abundance
+# Print average molecule abundance
 message(paste("Average <x1>:", signif(mean(unlist(sim_A$molecules_over_time["x1",])), 5)))
 message(paste("Average <x2>:", signif(mean(unlist(sim_A$molecules_over_time["x2",])), 5)))
 message(paste("Average <x3>:", signif(mean(unlist(sim_A$molecules_over_time["x3",])), 5)))
@@ -433,47 +436,12 @@ search_results <- parameterSearch(test_lambdas_1 = test_lambdas_1,
                                   function_type = "B",
                                   verbose = 1)
 
-# saveRDS(search_B, file = "function_B_search2.rds")
+# saveRDS(search_results, file = "function_A_search.rds")
+# saveRDS(search_results, file = "function_B_search.rds")
 
 # Open parameter search results for functions (a) and (b)
-search_A <- readRDS(file = "function_A_search_new.rds")
-search_B <- readRDS(file = "function_B_search_new.rds")
-
-# ## Update incorrect stats for B
-# params_B <- list()
-# stats_results_B <- list()
-# 
-# for (r in 1:length(search_A$sim_results)) {
-#   params_B[[r]] = list(lambda_1 = search_A$parameter_stats[r, "lambda_1"],
-#                        lambda_2 = search_A$parameter_stats[r, "lambda_2"],
-#                        beta_1 = search_A$parameter_stats[r, "beta_1"],
-#                        beta_2 = search_A$parameter_stats[r, "beta_2"],
-#                        K = search_A$parameter_stats[r, "K"])
-#   stats_results_B[[r]] <- calculateStats(X_over_time = search_A$sim_results[[r]]$molecules_over_time,
-#                                          rate_constants = params_B[[r]],
-#                                          jump_times = search_A$sim_results[[r]]$jump_times,
-#                                          function_type = "A")
-# }
-# 
-# numeric_stats <- cbind(do.call(rbind.data.frame, params_B),
-#                            do.call(rbind, lapply(stats_results_B, function(x) x$numerical)))
-# numeric_stats <- data.frame(lapply(numeric_stats, as.numeric))
-# analytic_stats <- cbind(do.call(rbind.data.frame, params_B),
-#                         do.call(rbind, lapply(stats_results_B, function(x) x$analytical)))
-# analytic_stats <- data.frame(lapply(analytic_stats, as.numeric))
-# 
-# search_A$numerical_stats <- numeric_stats
-# search_A$analytical_stats <- analytic_stats
-# 
-# saveRDS(search_B, file = "function_B_search_new.rds")
-
-# rps <- as.list(search_A$parameter_stats[1,][1:5])
-# rps <- lapply(rps, as.numeric)
-# 
-# calculateStats(X_over_time = search_A$sim_results[[1]]$molecules_over_time,
-#                rate_constants = rps,
-#                jump_times = search_B$sim_results[[r]]$jump_times,
-#                function_type = "A")
+search_A <- readRDS(file = "function_A_search.rds")
+search_B <- readRDS(file = "function_B_search.rds")
 
 
 plotCovariance <- function(points_A, points_B, no_outliers_A, no_outliers_B) {
