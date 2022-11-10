@@ -3,6 +3,10 @@ title: <b>Gillespie mRNA Simulator</b>
 output: html_notebook
 ---
 
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = TRUE) 
+```
+
 <img src="https://avatars.githubusercontent.com/u/61354833" align="left" width="70" height="70">
 
 Code by [TomMakesThings](https://github.com/TomMakesThings/Genome-Sequence-Analysis-HMM)
@@ -10,19 +14,19 @@ Code by [TomMakesThings](https://github.com/TomMakesThings/Genome-Sequence-Analy
 <br><br><br>
 
 ## Dual Reporter Method
-A modified gene produces two pieces of mRNA (<span style="color:#0384fc">$x_{1}$</span>) which stochastically transcribe different reporter proteins (<span style="color:blue">$x_{2}$</span>, <span style="color:#8003fc">$x_{3}$</span>), e.g. GFP and CFP, independently of one another. This dual reporter method can be modeled by the following reaction scheme:
+A modified gene produces two pieces of mRNA (<span style="color:red">$x_{1}$</span>) which stochastically transcribe different reporter proteins (<span style="color:deepskyblue">$x_{2}$</span>, <span style="color:purple">$x_{3}$</span>), e.g. CFP and GFP, independently of one another. This dual reporter method can be modeled by the following reaction scheme:
 
-<span style="color:#0384fc">$\text{Transcription: } \text{ } x_{1} \xrightarrow[]{f(x_{1})} x_{1} + 1$</span>
+$\text{Transcription: } x_{1} \xrightarrow[]{f(x_{1})} x_{1} + 1$
 
-<span style="color:blue">$\text{Translation of } x_{2} \text{: } \text{ } x_{2} \xrightarrow[]{\lambda_{2} x_{1}} x_{2} + 1$</span>
+$\text{mRNA degradation: } \text{ } x_{1} \xrightarrow[]{\beta_{1} x_{1}} x_{1} - 1$
 
-<span style="color:#8003fc">$\text{Translation of } x_{3} \text{: } x_{3} \xrightarrow[]{\lambda_{2} x_{1}} x_{3} + 1$</span>
+$\text{Translation of } x_{2} \text{: } x_{2} \xrightarrow[]{\lambda_{2} x_{1}} x_{2} + 1$
 
-<span style="color:#0384fc">$\text{mRNA degradation: } \text{ } x_{1} \xrightarrow[]{\beta_{1} x_{1}} x_{1} - 1$</span>
+$\text{Degradation of } x_{2} \text{: } x_{2} \xrightarrow[]{\beta_{2} x_{2}} x_{2} - 1$
 
-<span style="color:blue">$\text{Degradation of } x_{2} \text{: } x_{2} \xrightarrow[]{\beta_{2} x_{2}} x_{2} - 1$</span>
+$\text{Translation of } x_{3} \text{: } x_{3} \xrightarrow[]{\lambda_{2} x_{1}} x_{3} + 1$
 
-<span style="color:#8003fc">$\text{Degradation of } x_{3} \text{: } x_{3} \xrightarrow[]{\beta_{2} x_{3}} x_{3} - 1$</span>
+$\text{Degradation of } x_{3} \text{: } x_{3} \xrightarrow[]{\beta_{2} x_{3}} x_{3} - 1$
 
 <br>
 
@@ -30,13 +34,13 @@ A modified gene produces two pieces of mRNA (<span style="color:#0384fc">$x_{1}$
 Two different situations are modeled, whereby mRNA transcription is either constant or self-repressive. In both, mRNA are degraded one at a time at a rate $\beta_{1} x_{1}$:
 
 <ol type="a">
-  <li><span style="color:#0384fc">$f(x_{1}) = \lambda_{1}$</span></li>
+  <li><span style="color:#fc9803">$f(x_{1}) = \lambda_{1}$</span></li>
     <ul>
       <li>mRNA are transcribed one at a time in a Poission process at a rate $\lambda_{1}$</li>
       <li>The chemical master equation (CME), describing the time evolution of component $x_{1}$, is simply: $\frac{d P(x_{1})}{dt} = \underbrace{\lambda_{1} (P(x_{1} - 1) - \lambda_{1} P(x_{1})}_{\text{Synthesis}} + \underbrace{\beta_{1} (x_{1} + 1) P(x_{1} + 1) - \beta x_{1} P(x_{1})}_{\text{Degradation}}$</li>
     </ul>
   <br>
-  <li><span style="color:#0384fc">$f(x_{1}) = \lambda_{1} \frac{K}{K + x_{1}}$</span></li>
+  <li><span style="color:#248aff">$f(x_{1}) = \lambda_{1} \frac{K}{K + x_{1}}$</span></li>
     <ul>
       <li>Setting the production rate of mRNA as a function $f(x_{1})$, allows the model to incorporate positive /
       negative feedback</li>
@@ -48,19 +52,25 @@ Two different situations are modeled, whereby mRNA transcription is either const
 <br>
 
 ### Doob-Gillespie Algorithm
-To simulate the system over time, the Doob-Gillespie algorithm was applied. The principals are as follows:
+To simulate the system over time, the Doob-Gillespie algorithm is applied:
 
 <ol>
-  <li>At time $t_{0}$, initialize the system's state $X_{i} = X_{0}$</li>
-  <li>At time $t_{i}$ and state $X_{i}$, evaluate all $a_{j}(X_{i})$ and their sum $a_{j}(X_{i})$</li>
-  <li></li>
-  <li></li>
+  <li>For a system at time $t = t_{0}$ with $n$ chemical species, initialize the system's state by setting the initial
+  numbers of molecules $x = x_{1}, x_{2}, ..., x_{n}$.</li>
+  <li>Set the $p$ reactions rates $r_{1}(x), r_{2}(x), ..., r_{p}(x)$, where reaction $k$ adds $\delta_{jk}$
+  molecules.</li>
+  <li>Calculate the total reaction rate $r_{T} = \sum^{N}_{k=1}r_{k}(x)$ for the system at time $t$.</li>
+  <li>Select the waiting time until the next reaction from an exponential distribution, with cumulative distribution function $F(t) = 1 - e^{-r_{T}t}$.</li>
+  <li>Select a reaction $i$ with probability $\frac{r_{i}(x)}{r_{T}(x)}$.</li>
+  <li>For each molecular species effected by reaction $i$, update its concentration in the system $x_{j}  \xrightarrow[]{}{} x_{j} + \delta_{ji}$.</li>
+  <li>If the maximum number of iterations is reached, stop simulation. Otherwise go back to step 3.</li>
 </ol>
 
 <br>
 
-## Code Imports
-
+## Code
+### Set Up
+Import the following libraries, set a seed and define the working directory.
 ```{r}
 library(SciViews)
 library(ggplot2)
@@ -73,9 +83,9 @@ set.seed(123)
 setwd("C:/Users/redds/Documents/GitHub/Gillespie")
 ```
 
-## Molecule
-Set the initial number of molecules (x1, x2 and x3) and change in molecule numbers per reaction
-
+### Initialise System's State
+At time $t_{i} = t_{0}$, the initial number of molecules is set so that each molecular species begins with 50 molecules, i.e. $x = x_{1} = 50, x_{2} = 50, x_{3} = 50$. The stoichiometry of the system (the number
+of molecules created or degraded per reaction) is encoded as $\delta$ values. For example, reaction $r_{1}$ entails transcription of a single $x_{1}$ molecule, and so $\delta_{11} = 1, \delta_{12} = 0, \delta_{13} = 0$.
 ```{r}
 # Set initial number of molecules
 X_initial <- list(x1 = 50, x2 = 50, x3 = 50)
@@ -86,7 +96,389 @@ reaction_deltas <- list(c(x1 = 1, x2 = 0, x3 = 0), c(x1 = -1, x2 = 0, x3 = 0),
                         c(x1 = 0, x2 = 0, x3 = 1), c(x1 = 0, x2 = 0, x3 = -1))
 ```
 
+### Doob-Gillespie Algorithm
+#### Helper Functions
+The following are helper functions used to run the Doob-Gillespie algorithm.
 ```{r}
+# Dynamically calculate the reaction rate given an equation
+calculateRate <- function(rate_equation, rate_constants, X) {
+  # Converts string to equation and evaluates it
+  # E.g. if variables beta = 10 and x1 = 5, then "beta * X$x1" becomes beta * x1 and 50 is returned
+  eval(parse(text = rate_equation))
+}
 
+# Generate random wait time between reactions
+calculateJumpTime <- function(rT) {
+  # Generate random number between 0 - 1 from a uniform distribution
+  u_time <- runif(1, 0, 1)
+  # Calculate the random jump time by converting from a uniform to exponentially distributed number
+  jump_time <- - ln(u_time) / rT
+  
+  return(jump_time)
+}
+
+# Calculate normalised variation and covariance
+calculateStats <- function(X_over_time, rate_constants, jump_times,
+                           function_type = "A") {
+  
+  # Extract the rate constant parameters
+  lambda_1 <- rate_constants$lambda_1
+  lambda_2 <- rate_constants$lambda_2
+  beta_1 <- rate_constants$beta_1
+  beta_2 <- rate_constants$beta_2
+  K <- rate_constants$K
+  
+  # Calculate the average number of x1, x2 and x3 molecules
+  x_averages <- list()
+  
+  for (x in rownames(X_over_time)) {
+    x_averages[[x]] <- weighted.mean(x = unlist(X_over_time[x,]), w = jump_times)
+  }
+  
+  # Calculate analytic etas
+  if (toupper(function_type) == "A") {
+    # Calculate normalised variance for function (a)
+    eta_11 <- 1 / x_averages[["x1"]]
+    
+    # Normalised co-variance
+    eta_12 <- eta_11 * (beta_2 / (beta_1 + beta_2))
+    eta_23 <- eta_12
+    
+  } else {
+    # Calculate placeholder alpha for function (b)
+    alpha <- x_averages[["x1"]] / (K + x_averages[["x1"]])
+    
+    eta_11 <- 1 / (x_averages[["x1"]] + alpha)
+    eta_12 <- eta_11 * (beta_2 / (beta_1 + (beta_1 * alpha) + beta_2))
+    eta_23 <- eta_12
+  }
+  
+  # Calculate weighted covariance between x1, x2 and x3 molecules
+  abundance_df <- data.frame(t(X_over_time))
+  abundance_df <- data.frame(lapply(abundance_df, as.numeric))
+  molecule_cov <- cov.wt(abundance_df, as.vector(jump_times))$cov
+  
+  # Calculate numeric etas
+  num_eta11 <- molecule_cov["x1", "x1"] / (x_averages[["x1"]] * x_averages[["x1"]])
+  num_eta12 <- molecule_cov["x1", "x2"] / (x_averages[["x1"]] * x_averages[["x2"]])
+  num_eta23 <- molecule_cov["x2", "x3"] / (x_averages[["x2"]] * x_averages[["x3"]])
+  
+  # Record results
+  results <- list(analytical = list(eta_11 = eta_11,
+                                    eta_12 = eta_12,
+                                    eta_23 = eta_23),
+                  numerical = list(eta_11 = num_eta11,
+                                   eta_12 = num_eta12,
+                                   eta_23 = num_eta23))
+  
+  return(results)
+}
+```
+
+#### Doob-Gillespie Function
+Within the Doob-Gillespie algorithm, the number of molecules over time, jump time between each reaction and a trace-back of which reactions are selected are recorded. The simulation is run for $N$ iterations, each of which represents a time step in which a reaction occurs. The reaction rate $r_{k}$ for each reaction $k$ is updated for each time step. This is because the degradation reactions dynamically change depending on the concentration of each type of molecule. The total rate $r_{T}$ must therefore also be recalculated.
+
+$r_{T} = \sum^{N}_{k=1} r_{k}(x)$
+
+The jump times between reactions are derived from an exponential distribution. In R, this is achieved through generating a random number between 0 - 1 from a uniform distribution, and then converting this to a time $t_{i}$ through inverting the exponential cumulative distribution function.
+
+$u_{time} = F(t) = 1 - e^{-r_{T}t}$
+
+$t = - \frac{ln(u_{time})}{r_{T}}$
+
+Next the probability of each reaction $k$ occurring is evaluated based upon the reaction rates, $r_{k}/ r_{T}$. The cumulative sums of reaction probabilities are calculated to partition the probabilities into sections. Another number is then generated from a uniform distribution and compared against the partition to determine which reaction will occur. The number of molecules is updated according to the chosen reaction by adding the $\delta_{k}$ values to the current state of the system.
+
+Since it is unrealistic for the number of molecules to become negative, a check has been included to prevent impossible degradation reactions from being selected at each given time point. For example, a reaction involving $x_{1} - 1$ cannot occur if $x_{1} = 0$ at time $t_{i}$.
+
+```{r}
+# Doob-Gillespie algorithm
+# X: initial number of molecules
+# rate_constants: list of constant parameters for calculating rates
+# deltas: list of vectors for the number of molecules that will change per reaction
+# rates: formulas for reaction rates per reaction
+# N: max number of iterations
+# stop_at_stationary: whether to stop the simulation early if reached stationarity condition
+# min_N: minimum number of iterations is stopping when reached stationarity
+# flux_threshold: minimum difference between <R+> and <R-> for stationarity
+# verbose: set as > 0 for debugging messages
+gillespie <- function(X, rate_constants, deltas, rates, N = 100000,
+                      stop_at_stationary = FALSE, min_N = 10000, 
+                      flux_threshold = 0.1, verbose = 0) {
+  # Record number of molecules over time in a matrix
+  X_over_time <- matrix(data = X, nrow = length(X))
+  # Record which reaction occurred at each time step t
+  reaction_trace <- c()
+  # Record time t between reactions
+  times <- c(0)
+  
+  # Determine which reactions contains molecule degradation
+  degradation_reactions <- which(unlist(lapply(deltas, function(x) any(x < 0))))
+  
+  # Calculate the magnitude of the highest degradation delta value
+  degradation_deltas <- unlist(deltas[degradation_reactions])
+  max_degration <- abs(degradation_deltas[which.max(abs(degradation_deltas))])
+  
+  n <- 0
+  stationarity_reached <- FALSE
+  
+  # Run simulation N times or until stationarity is reached
+  while (n < N & !stationarity_reached) {
+    n <- n + 1
+    
+    # Get the number of molecules at time step t
+    current_molecules <- unlist(X_over_time[, dim(X_over_time)[2]])
+    names(current_molecules) <- names(X)
+    
+    # Initially set all reactions as possible at the current time step
+    possible_reactions <- 1:length(rates)
+    
+    # Check if any degradation reactions will cause a negative number of molecules
+    if (any(current_molecules - rep(max_degration, length(current_molecules)) < 0)) {
+      # Find which reactions cannot occur
+      impossible_reactions <- c()
+      
+      for (reaction_idx in degradation_reactions) {
+        # Calculate number of molecules left if reaction occurs
+        n_molecules <- unlist(X_over_time[, dim(X_over_time)[2]]) + deltas[[reaction_idx]]
+        
+        # Record reaction as impossible if the number of any molecule is below zero
+        if (any(n_molecules < 0)) {
+          impossible_reactions <- c(impossible_reactions, reaction_idx)
+        }
+      }
+      # Update list of possible reactions to remove impossible ones
+      possible_reactions <- possible_reactions[!possible_reactions %in% impossible_reactions]
+    }
+    
+    # Calculate the current reaction rates for the system at time t, excluding impossible reactions
+    current_rates <- unname(unlist(lapply(rates[possible_reactions],
+                                          function(rate_equation) calculateRate(rate_equation,
+                                                                                rate_constants,
+                                                                                current_molecules))))
+    # Calculate the total reaction rate
+    r_total <- sum(current_rates)
+    
+    # Generate the jump time for the next reaction
+    times <- c(times, calculateJumpTime(r_total))
+    
+    # Calculate the probability of each reaction occurring
+    reaction_probs <- current_rates / r_total
+    prob_partitions <- cumsum(reaction_probs)
+
+    # Select a random reaction (relative to the probability of each occurring)
+    u_reaction <- runif(1, 0, 1)
+    reaction_idx <- min(which(prob_partitions > u_reaction))
+    
+    # Calculate the molecule numbers after the chosen reaction
+    n_molecules <- current_molecules + deltas[possible_reactions][[reaction_idx]]
+    
+    # Record which reaction occurred
+    reaction_trace <- c(reaction_trace, reaction_idx)
+    # Update the number of molecules by the chosen reaction
+    X_over_time <- cbind(X_over_time, n_molecules)
+    
+    if (verbose > 0 & n %% 10000 == 0) {
+      message(paste("Reached iteration", n))
+    }
+    
+    if (stop_at_stationary & n %% 500 == 0 & n >= min_N) {
+      # Check if difference in birth and death flux is less than a threshold
+      stats <- calculateStats(X_over_time, rate_constants, times,
+                              flux_threshold = flux_threshold,
+                              calculate_efficiency = FALSE,
+                              calculate_variation = FALSE,
+                              calculate_covariance = FALSE)
+      
+      # Stop simulation if TRUE
+      stationarity_reached <- stats$stationarity_reached
+      # flux_differences <- stats$flux_differences
+      
+      if (stationarity_reached) {
+        if (verbose > 0) {
+          message(paste("Stationarity reached after", n, "iterations"))
+        }
+      }
+    }
+  }
+  
+  # Rename columns to time t for each reaction
+  colnames(X_over_time) <- cumsum(times)
+  
+  return(list(molecules_over_time = X_over_time,
+              reaction_trace = reaction_trace,
+              jump_times = times,
+              n_iterations = n))
+}
+```
+
+### Testing mRNA Production Rates
+Run the Doob-Gillespie algorithm over 250,000 iterations for functions (a) and (b).
+
+```{r}
+# Set the functions to test
+test_funcs <- c("A", "B")
+# Max number of iterations to run the Gillespie algorithm
+N_iterations <- 250000
+# Set as > 0 for debugging messages
+sim_verbose <- 0
+
+# Create folder (if doesn't exist) to store simulations
+sim_folder <- file.path(getwd(), "Simulations")
+dir.create(sim_folder)
+```
+
+For both functions, rate constants are set with $\beta_{1} = \lambda_{2} = 1$ and $\beta_{2} = 0.1$. To ensure that $\left\langle x_{2} \right\rangle \simeq 20$, $\lambda_{1}$ and $K$ were determined for functions (a) and (b). These were calculated using the principal that at stationarity, $\left\langle R^{+} \right\rangle = \left\langle R^{-} \right\rangle$.
+
+```{r}
+# Test functions A and B for mRNA transcription
+for (func in test_funcs) {
+  # Set parameters for function A, where mRNA is transcribed at a constant rate
+  if (toupper(func) == "A") {
+    # Set rates for production, degradation and complex formation
+    rate_parameters <- list(lambda_1 = 20, beta_1 = 1, lambda_2 = 1, beta_2 = 0.1)
+
+    # Rate formulas per reaction
+    # Values are calculated using parameters specified in the gillespie function
+    reaction_rates = c("rate_constants$lambda_1", # mRNA (x1) transcription
+                       "rate_constants$beta_1 * X[[\"x1\"]]", # mRNA (x1) degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x2 translation
+                       "rate_constants$beta_2 * X[[\"x2\"]]", # x2 degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
+                       "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
+
+  } else {
+    # Set parameters for function B, where mRNA is self-repressed
+    rate_parameters <- list(lambda_1 = 30, K = 40, beta_1 = 1, lambda_2 = 1, beta_2 = 0.1)
+
+    reaction_rates = c("rate_constants$lambda_1 * (rate_constants$K) / (rate_constants$K + X[[\"x1\"]])", # mRNA (x1) transcription
+                       "rate_constants$beta_1 * X[[\"x1\"]]", # mRNA (x1) degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x2 translation
+                       "rate_constants$beta_2 * X[[\"x2\"]]", # x2 degradation
+                       "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
+                       "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
+  }
+
+  # Run the Gillespie algorithm
+  simulation_results <- gillespie(X = X_initial,
+                                  rate_constants = rate_parameters,
+                                  deltas = reaction_deltas,
+                                  rates = reaction_rates,
+                                  N = N_iterations,
+                                  stop_at_stationary = FALSE,
+                                  min_N = 1000,
+                                  verbose = sim_verbose)
+
+  if (toupper(func) == "A") {
+    saveRDS(simulation_results, file = file.path(sim_folder, "sim_A.rds"))
+  } else {
+    saveRDS(simulation_results, file = file.path(sim_folder, "sim_B.rds"))
+  }
+}
+```
+
+### Molecule Abundance Over Time
+Function to plot a time trace of molecule abundance over time.
+```{r}
+# Create plot of molecule abundance over time
+timePlot <- function(molecule_counts, plot_colours = c("red", "deepskyblue", "purple"),
+                     title = "Number of Molecules Over Time",
+                     xaxis_label = "Time (s)", yaxis_label = "Number of Molecules",
+                     xlimits = NA, ylimits = NA) {
+  # Convert data into form for plotting
+  molecules_time_df <- data.frame(n_molecules = unlist(c(molecule_counts)),
+                                  molecule_type = row.names(molecule_counts),
+                                  time = as.numeric(rep(colnames(molecule_counts),
+                                                        each = nrow(molecule_counts))))
+  # Plot molecules over time
+  time_plot <- ggplot(data = molecules_time_df,
+                      aes(x = time, y = n_molecules,
+                          group = molecule_type,
+                          color = molecule_type)) +
+    geom_line() +
+    labs(title = title,
+         x = xaxis_label,
+         y = yaxis_label) +
+    guides(color = guide_legend(title = "Molecule Type")) +
+    scale_color_manual(labels = c(expression("mRNA (" ~ x[1] ~ ")"),
+                                  expression("Protein (" ~ x[2] ~ ")"),
+                                  expression("Protein (" ~ x[3] ~ ")")),
+                       values = plot_colours)
+  
+  if (!is.na(xlimits)) {
+    # Set x-axis limits
+    time_plot <- time_plot + scale_x_continuous(limits = xlimits)
+  }
+  if (!is.na(ylimits)) {
+    # Set y-axis limits
+    time_plot <- time_plot + scale_y_continuous(limits = ylimits)
+  }
+  
+  return(time_plot)
+}
+```
+
+
+Open the run simulations, view statistics and create traces for functions (a) and (b).
+
+```{r}
+# Store run simulations and plots
+simulations <- list()
+time_traces <- list()
+
+for (func in test_funcs) {
+  # Open the saved simulations for functions (a) and (b)
+  if (func == "A") {
+    simulations[[func]] <- readRDS(file = file.path(sim_folder, "sim_A.rds"))
+  } else {
+    simulations[[func]] <- readRDS(file = file.path(sim_folder, "sim_B.rds"))
+  }
+  
+  # Print average molecule abundance and efficiency
+  message(paste0("Function ", func, ":",
+                 "\nAverage <x1>: ", signif(mean(unlist(simulations[[func]]$molecules_over_time["x1",])), 5),
+                 "\nAverage <x2>: ", signif(mean(unlist(simulations[[func]]$molecules_over_time["x2",])), 5),
+                 "\nAverage <x3>: ", signif(mean(unlist(simulations[[func]]$molecules_over_time["x3",])), 5),
+                 "\n"))
+  
+  # # Calculate efficiency for the simulation
+  # simulation_stats <- calculateStats(X_over_time = simulations[[func]]$molecules_over_time,
+  #                                    rate_constants = rate_parameters,
+  #                                    jump_times = simulations[[func]]$jump_times,
+  #                                    function_type = func)
+  # message(simulation_stats)
+  
+  # Create plot of molecules over time
+  time_traces[[func]] <- timePlot(simulations[[func]]$molecules_over_time, 
+                                  title = paste("Function", func),
+                                  xlimits = c(0, 2100),
+                                  ylimits = c(0, 300))
+}
+```
+#### Results
+For both functions, the number of mRNA molecules quickly drops to around 20 before remaining fairly stable with little fluctuation. Function (b) converges to 20 slightly faster due to negative feedback in mRNA production rate which adjusts the system back to a steady state. Similarly for both, the reporter proteins grow rapidly before reaching a stable state around 200 in which the molecules fluctuate between approximately 150 - 250. The model therefore captures a common situation within a cell where mRNAs are have low numbers relative to the protein.
+
+In this system, there is an approximately 10 fold increase between the mRNA and protein abundance which can be explained as $\beta_{1} = 10 \beta_{2}$. This means that mRNA molecules are degraded at a much faster rate than proteins which reflecting their instability within a cell. By contrast, proteins are modeled to be much more stable as in reality they are held together by strong covalent peptide bonds.
+
+In general, both reporters seem to be positively correlated with one another as fluctuations rise and fall within similar periods of time. This effect likely propagates from small perturbations in the abundance of mRNA, though this effect is averaged across time causing a delay from the time of transcription and degradation of mRNA. Occasionally protein fluctuations become out of sync reflecting the stochasticity of protein synthesis and proteolysis.
+
+```{r}
+# Create folder to save plots
+plot_folder <- file.path(getwd(), "Plots")
+dir.create(plot_folder)
+
+# Combine traces as subplots
+time_subplots <- ggarrange(time_traces[["A"]], time_traces[["B"]],
+                           nrow = 2, widths = c(1, 1),
+                           common.legend = TRUE, legend = "right")
+time_subplots <- annotate_figure(time_subplots,
+                                 top = text_grob("Molecules Over Time",
+                                                 face = "bold", size = 14))
+
+# Save the plot
+pdf(file.path(plot_folder, "Molecules_Over_Time.pdf"), width = 18, height = 8)
+print(time_subplots)
+invisible(dev.off())
+
+print(time_subplots)
 ```
 

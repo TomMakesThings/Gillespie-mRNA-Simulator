@@ -238,17 +238,23 @@ for (func in c("A", "B")) {
                        "rate_constants$lambda_2 * X[[\"x1\"]]", # x3 translation
                        "rate_constants$beta_2 * X[[\"x3\"]]") # x3 degradation
   }
+  
+  # Run the Gillespie algorithm
+  simulation_results <- gillespie(X = X_initial,
+                                  rate_constants = rate_parameters,
+                                  deltas = reaction_deltas,
+                                  rates = reaction_rates,
+                                  N = 250000,
+                                  stop_at_stationary = FALSE,
+                                  min_N = 1000,
+                                  verbose = 1)
+  
+  if (toupper(func) == "A") {
+    saveRDS(simulation_results, file = "sim_A.rds")
+  } else {
+    saveRDS(simulation_results, file = "sim_B.rds")
+  }
 }
-
-# Run the Gillespie algorithm
-simulation_results <- gillespie(X = X_initial,
-                                rate_constants = rate_parameters,
-                                deltas = reaction_deltas,
-                                rates = reaction_rates,
-                                N = 250000,
-                                stop_at_stationary = FALSE,
-                                min_N = 1000,
-                                verbose = 1)
 
 # Save simulations for each function
 # - Code above must be run for each function separately
