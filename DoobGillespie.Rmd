@@ -84,21 +84,23 @@ setwd("C:/Users/redds/Documents/GitHub/Gillespie")
 ```
 
 ### Initialise System's State
-At time $t_{i} = t_{0}$, the initial number of molecules is set so that each molecular species begins with 50 molecules, i.e. $x = x_{1} = 50, x_{2} = 50, x_{3} = 50$. The stoichiometry of the system (the number
-of molecules created or degraded per reaction) is encoded as $\delta$ values. For example, reaction $r_{1}$ entails transcription of a single $x_{1}$ molecule, and so $\delta_{11} = 1, \delta_{12} = 0, \delta_{13} = 0$.
+At time $t_{i} = t_{0}$, the initial number of molecules is set so that each molecular species with at 50. The stoichiometry of the system (the number of molecules created or degraded per reaction) is encoded as $\delta$ values. For example, reaction $r_{2}$ entails degradation of a single $x_{1}$ molecule, and so $\delta_{11} = -1$.
 ```{r}
 # Set initial number of molecules
 X_initial <- list(x1 = 50, x2 = 50, x3 = 50)
 
 # Change in molecule numbers per reaction
-reaction_deltas <- list(c(x1 = 1, x2 = 0, x3 = 0), c(x1 = -1, x2 = 0, x3 = 0),
-                        c(x1 = 0, x2 = 1, x3 = 0), c(x1 = 0, x2 = -1, x3 = 0),
-                        c(x1 = 0, x2 = 0, x3 = 1), c(x1 = 0, x2 = 0, x3 = -1))
+reaction_deltas <- list(c(x1 = 1, x2 = 0, x3 = 0), # x1 transcription
+                        c(x1 = -1, x2 = 0, x3 = 0), #x1 degradation
+                        c(x1 = 0, x2 = 1, x3 = 0), # x2 translation
+                        c(x1 = 0, x2 = -1, x3 = 0), # x2 degradation
+                        c(x1 = 0, x2 = 0, x3 = 1), # x3 translation
+                        c(x1 = 0, x2 = 0, x3 = -1)) # x3 degradation
 ```
 
 ### Doob-Gillespie Algorithm
 #### Helper Functions
-The following are helper functions used to run the Doob-Gillespie algorithm.
+The following are helper functions used to calculate reaction rates and generate random jump times.
 ```{r}
 # Dynamically calculate the reaction rate given an equation
 calculateRate <- function(rate_equation, rate_constants, X) {
@@ -116,66 +118,9 @@ calculateJumpTime <- function(rT) {
   
   return(jump_time)
 }
-
-# Calculate normalised variation and covariance
-calculateStats <- function(X_over_time, rate_constants, jump_times,
-                           function_type = "A") {
-  
-  # Extract the rate constant parameters
-  lambda_1 <- rate_constants$lambda_1
-  lambda_2 <- rate_constants$lambda_2
-  beta_1 <- rate_constants$beta_1
-  beta_2 <- rate_constants$beta_2
-  K <- rate_constants$K
-  
-  # Calculate the average number of x1, x2 and x3 molecules
-  x_averages <- list()
-  
-  for (x in rownames(X_over_time)) {
-    x_averages[[x]] <- weighted.mean(x = unlist(X_over_time[x,]), w = jump_times)
-  }
-  
-  # Calculate analytic etas
-  if (toupper(function_type) == "A") {
-    # Calculate normalised variance for function (a)
-    eta_11 <- 1 / x_averages[["x1"]]
-    
-    # Normalised co-variance
-    eta_12 <- eta_11 * (beta_2 / (beta_1 + beta_2))
-    eta_23 <- eta_12
-    
-  } else {
-    # Calculate placeholder alpha for function (b)
-    alpha <- x_averages[["x1"]] / (K + x_averages[["x1"]])
-    
-    eta_11 <- 1 / (x_averages[["x1"]] + alpha)
-    eta_12 <- eta_11 * (beta_2 / (beta_1 + (beta_1 * alpha) + beta_2))
-    eta_23 <- eta_12
-  }
-  
-  # Calculate weighted covariance between x1, x2 and x3 molecules
-  abundance_df <- data.frame(t(X_over_time))
-  abundance_df <- data.frame(lapply(abundance_df, as.numeric))
-  molecule_cov <- cov.wt(abundance_df, as.vector(jump_times))$cov
-  
-  # Calculate numeric etas
-  num_eta11 <- molecule_cov["x1", "x1"] / (x_averages[["x1"]] * x_averages[["x1"]])
-  num_eta12 <- molecule_cov["x1", "x2"] / (x_averages[["x1"]] * x_averages[["x2"]])
-  num_eta23 <- molecule_cov["x2", "x3"] / (x_averages[["x2"]] * x_averages[["x3"]])
-  
-  # Record results
-  results <- list(analytical = list(eta_11 = eta_11,
-                                    eta_12 = eta_12,
-                                    eta_23 = eta_23),
-                  numerical = list(eta_11 = num_eta11,
-                                   eta_12 = num_eta12,
-                                   eta_23 = num_eta23))
-  
-  return(results)
-}
 ```
 
-#### Doob-Gillespie Function
+#### Doob-Gillespie Implementation
 Within the Doob-Gillespie algorithm, the number of molecules over time, jump time between each reaction and a trace-back of which reactions are selected are recorded. The simulation is run for $N$ iterations, each of which represents a time step in which a reaction occurs. The reaction rate $r_{k}$ for each reaction $k$ is updated for each time step. This is because the degradation reactions dynamically change depending on the concentration of each type of molecule. The total rate $r_{T}$ must therefore also be recalculated.
 
 $r_{T} = \sum^{N}_{k=1} r_{k}(x)$
@@ -197,13 +142,9 @@ Since it is unrealistic for the number of molecules to become negative, a check 
 # deltas: list of vectors for the number of molecules that will change per reaction
 # rates: formulas for reaction rates per reaction
 # N: max number of iterations
-# stop_at_stationary: whether to stop the simulation early if reached stationarity condition
-# min_N: minimum number of iterations is stopping when reached stationarity
-# flux_threshold: minimum difference between <R+> and <R-> for stationarity
 # verbose: set as > 0 for debugging messages
-gillespie <- function(X, rate_constants, deltas, rates, N = 100000,
-                      stop_at_stationary = FALSE, min_N = 10000, 
-                      flux_threshold = 0.1, verbose = 0) {
+gillespie <- function(X, rate_constants, deltas, rates, N = 100000, 
+                      verbose = 0) {
   # Record number of molecules over time in a matrix
   X_over_time <- matrix(data = X, nrow = length(X))
   # Record which reaction occurred at each time step t
@@ -280,25 +221,6 @@ gillespie <- function(X, rate_constants, deltas, rates, N = 100000,
     if (verbose > 0 & n %% 10000 == 0) {
       message(paste("Reached iteration", n))
     }
-    
-    if (stop_at_stationary & n %% 500 == 0 & n >= min_N) {
-      # Check if difference in birth and death flux is less than a threshold
-      stats <- calculateStats(X_over_time, rate_constants, times,
-                              flux_threshold = flux_threshold,
-                              calculate_efficiency = FALSE,
-                              calculate_variation = FALSE,
-                              calculate_covariance = FALSE)
-      
-      # Stop simulation if TRUE
-      stationarity_reached <- stats$stationarity_reached
-      # flux_differences <- stats$flux_differences
-      
-      if (stationarity_reached) {
-        if (verbose > 0) {
-          message(paste("Stationarity reached after", n, "iterations"))
-        }
-      }
-    }
   }
   
   # Rename columns to time t for each reaction
@@ -312,7 +234,7 @@ gillespie <- function(X, rate_constants, deltas, rates, N = 100000,
 ```
 
 ### Testing mRNA Production Rates
-Run the Doob-Gillespie algorithm over 250,000 iterations for functions (a) and (b).
+The Doob-Gillespie algorithm is set to run for 250,000 iterations separately with functions (a) and (b) as the mRNA transcription rates. As each simulation takes a while to run, it is saved to file.
 
 ```{r}
 # Set the functions to test
@@ -327,7 +249,28 @@ sim_folder <- file.path(getwd(), "Simulations")
 dir.create(sim_folder)
 ```
 
-For both functions, rate constants are set with $\beta_{1} = \lambda_{2} = 1$ and $\beta_{2} = 0.1$. To ensure that $\left\langle x_{2} \right\rangle \simeq 20$, $\lambda_{1}$ and $K$ were determined for functions (a) and (b). These were calculated using the principal that at stationarity, $\left\langle R^{+} \right\rangle = \left\langle R^{-} \right\rangle$.
+For both simulations, reaction rate constants are set with $\beta_{1} = \lambda_{2} = 1$ and $\beta_{2} = 0.1$. To ensure that the average mRNA concentration converges to the same number in each simulation, e.g. $\left\langle x_{1} \right\rangle \simeq 20$, values of $\lambda_{1}$ and $K$ were determined for functions (a) and (b) separately. These were calculated using the principal that at stationarity, the average rate of production equals the average rate of degradation, i.e. $\left\langle R^{+} \right\rangle = \left\langle R^{-} \right\rangle$.
+
+<ol type="a">
+  <li><span style="color:#fc9803">$f(x_{1}) = \lambda_{1}$</span></li>
+    <ul style="list-style-type: none;">
+      <li>$\lambda_{1} = \beta_{1} \left\langle x_{1} \right\rangle$</li>
+      <li>$\lambda_{1} = 1 \cdot 20$</li>
+      <li/>$\therefore \lambda_{1} = 20$</li>
+    </ul>
+  <br>
+  <li><span style="color:#248aff">$f(x_{1}) = \lambda_{1} \frac{K}{K + x_{1}}$</span></li>
+    <ul style="list-style-type: none;">
+      <li>$\lambda_{1} \frac{K}{K + x_{1}} = \beta_{1} \left\langle x_{1} \right\rangle$</li>
+      <li>$\lambda_{1} K = \left\langle x_{1} \right\rangle (K + \left\langle x_{1} \right\rangle)$</li>
+      <li>$\lambda_{1} K = 20 (K + 20)$</li>
+      <li>$K(\lambda_{1} - 20) = 400$</li>
+      <li>$K = \frac{400}{\lambda_{1} - 20}$</li>
+      <li>$\therefore \lambda_{1} \ne 20$</li>
+    </ul>
+</ol>
+
+For function (a), there is only one solution of $\lambda_{1} = 20$. For (b), multiple solutions are possible, though when $\lambda_{1} = 20$, then $K \rightarrow \infty$. Therefore $\lambda_{1} = 30$ was arbitrarily chosen and other parameter set as $K = 40$.
 
 ```{r}
 # Test functions A and B for mRNA transcription
@@ -364,8 +307,6 @@ for (func in test_funcs) {
                                   deltas = reaction_deltas,
                                   rates = reaction_rates,
                                   N = N_iterations,
-                                  stop_at_stationary = FALSE,
-                                  min_N = 1000,
                                   verbose = sim_verbose)
 
   if (toupper(func) == "A") {
@@ -377,7 +318,7 @@ for (func in test_funcs) {
 ```
 
 ### Molecule Abundance Over Time
-Function to plot a time trace of molecule abundance over time.
+The function below plots a time trace of molecule abundance over time.
 ```{r}
 # Create plot of molecule abundance over time
 timePlot <- function(molecule_counts, plot_colours = c("red", "deepskyblue", "purple"),
@@ -418,7 +359,7 @@ timePlot <- function(molecule_counts, plot_colours = c("red", "deepskyblue", "pu
 ```
 
 
-Open the run simulations, view statistics and create traces for functions (a) and (b).
+After running the simulations, the average number of molecules of each species is printed. This confirms that for both functions, the calculated set of parameters leads to $\left\langle x_{1} \right\rangle \simeq 20$ after the system reaches stationarity.
 
 ```{r}
 # Store run simulations and plots
@@ -440,13 +381,6 @@ for (func in test_funcs) {
                  "\nAverage <x3>: ", signif(mean(unlist(simulations[[func]]$molecules_over_time["x3",])), 5),
                  "\n"))
   
-  # # Calculate efficiency for the simulation
-  # simulation_stats <- calculateStats(X_over_time = simulations[[func]]$molecules_over_time,
-  #                                    rate_constants = rate_parameters,
-  #                                    jump_times = simulations[[func]]$jump_times,
-  #                                    function_type = func)
-  # message(simulation_stats)
-  
   # Create plot of molecules over time
   time_traces[[func]] <- timePlot(simulations[[func]]$molecules_over_time, 
                                   title = paste("Function", func),
@@ -455,11 +389,11 @@ for (func in test_funcs) {
 }
 ```
 #### Results
-For both functions, the number of mRNA molecules quickly drops to around 20 before remaining fairly stable with little fluctuation. Function (b) converges to 20 slightly faster due to negative feedback in mRNA production rate which adjusts the system back to a steady state. Similarly for both, the reporter proteins grow rapidly before reaching a stable state around 200 in which the molecules fluctuate between approximately 150 - 250. The model therefore captures a common situation within a cell where mRNAs are have low numbers relative to the protein.
+In the plot of molecules over time, the number of mRNA molecules quickly drops to around 20 before remaining fairly stable with little fluctuation for both functions. Function (b) converges to 20 slightly faster due to negative feedback in mRNA production rate which adjusts the system back to a steady state. For both, reporter protein concentration grows rapidly before reaching a stable state around 200 in which the molecules fluctuate between approximately 150 - 250. This model therefore captures a common situation in a cell where mRNA has low abundance relative to protein.
 
-In this system, there is an approximately 10 fold increase between the mRNA and protein abundance which can be explained as $\beta_{1} = 10 \beta_{2}$. This means that mRNA molecules are degraded at a much faster rate than proteins which reflecting their instability within a cell. By contrast, proteins are modeled to be much more stable as in reality they are held together by strong covalent peptide bonds.
+The approximately 10 fold increase between mRNA and protein abundance can be explained as $\beta_{1} = 10 \beta_{2}$. This means mRNA molecules are degraded at a much faster rate than proteins, reflecting their instability within a cell. By contrast, proteins are modeled to be much more stable as in reality they are held together by strong covalent peptide bonds.
 
-In general, both reporters seem to be positively correlated with one another as fluctuations rise and fall within similar periods of time. This effect likely propagates from small perturbations in the abundance of mRNA, though this effect is averaged across time causing a delay from the time of transcription and degradation of mRNA. Occasionally protein fluctuations become out of sync reflecting the stochasticity of protein synthesis and proteolysis.
+In general, both reporters are positively correlated with one another as fluctuations rise and fall within similar periods of time. This effect likely propagates from small perturbations in mRNA abundance. However, it is averaged across time causing a delay from the time of transcription and degradation of mRNA. Occasionally protein fluctuations become out of sync reflecting the stochasticity of protein synthesis and proteolysis.
 
 ```{r}
 # Create folder to save plots
@@ -480,5 +414,173 @@ print(time_subplots)
 invisible(dev.off())
 
 print(time_subplots)
+```
+
+#### Algorithm Statistics
+The normalised variance of average mRNA abundance, $\eta_{11}$, and normalized covariances $\eta_{12}$, $\eta_{23}$ for the functions are as follows:
+
+<ol type="a">
+  <li><span style="color:#fc9803">$f(x_{1}) = \lambda_{1}$</span></li>
+    <ul style="list-style-type: none;">
+      <li>$\eta_{11} = \frac{1}{\left\langle x_{1} \right\rangle}$</li>
+      <li>$\eta_{12} = \frac{1}{\left\langle x_{1} \right\rangle} \frac{\beta_{2}}{\beta_{1} + \beta_{2}}$</li>
+      <li>$\eta_{23} = \frac{1}{\left\langle x_{1} \right\rangle} \frac{\beta_{2}}{\beta_{1} + \beta_{2}}$</li>
+    </ul>
+  <br>
+  <li><span style="color:#248aff">$f(x_{1}) = \lambda_{1} \frac{K}{K + x_{1}}$</span></li>
+    <ul style="list-style-type: none;">
+      <li>$\eta_{11} = $</li>
+      <li>$\eta_{11} = $</li>
+      <li>$\eta_{11} = $</li>
+    </ul>
+</ol>
+
+```{r}
+# Calculates run time statistics as normalized variance and covariance
+calculateStats <- function(X_over_time, rate_constants, jump_times,
+                           function_type = "A") {
+  
+  # Extract the rate constant parameters
+  lambda_1 <- rate_constants$lambda_1
+  lambda_2 <- rate_constants$lambda_2
+  beta_1 <- rate_constants$beta_1
+  beta_2 <- rate_constants$beta_2
+  K <- rate_constants$K
+  
+  # Calculate the average number of x1, x2 and x3 molecules
+  x_averages <- list()
+  
+  for (x in rownames(X_over_time)) {
+    x_averages[[x]] <- weighted.mean(x = unlist(X_over_time[x,]), w = jump_times)
+  }
+  
+  # Calculate analytic etas
+  if (toupper(function_type) == "A") {
+    # Calculate normalised variance for function (a)
+    eta_11 <- 1 / x_averages[["x1"]]
+    
+    # Normalised co-variance
+    eta_12 <- eta_11 * (beta_2 / (beta_1 + beta_2))
+    eta_23 <- eta_12
+    
+  } else {
+    # Calculate placeholder alpha for function (b)
+    alpha <- x_averages[["x1"]] / (K + x_averages[["x1"]])
+    
+    eta_11 <- 1 / (x_averages[["x1"]] + alpha)
+    eta_12 <- eta_11 * (beta_2 / (beta_1 + (beta_1 * alpha) + beta_2))
+    eta_23 <- eta_12
+  }
+  
+  # Calculate weighted covariance between x1, x2 and x3 molecules
+  abundance_df <- data.frame(t(X_over_time))
+  abundance_df <- data.frame(lapply(abundance_df, as.numeric))
+  molecule_cov <- cov.wt(abundance_df, as.vector(jump_times))$cov
+  
+  # Calculate numeric etas
+  num_eta11 <- molecule_cov["x1", "x1"] / (x_averages[["x1"]] * x_averages[["x1"]])
+  num_eta12 <- molecule_cov["x1", "x2"] / (x_averages[["x1"]] * x_averages[["x2"]])
+  num_eta23 <- molecule_cov["x2", "x3"] / (x_averages[["x2"]] * x_averages[["x3"]])
+  
+  # Record results
+  results <- list(analytical = list(eta_11 = eta_11,
+                                    eta_12 = eta_12,
+                                    eta_23 = eta_23),
+                  numerical = list(eta_11 = num_eta11,
+                                   eta_12 = num_eta12,
+                                   eta_23 = num_eta23))
+  
+  return(results)
+}
+```
+
+A parameter search was performed for functions (a) and (b) through testing 60 $\lambda_{1}$ values within the range [0.1, 100] for (a) and 64 combinations of $\lambda_{1}$ and $K$ values within the range [0.1, 100] for (b). For each parameter set, the Gillespie algorithm was run for 100,000 iterations. The normalized variance of the mRNA ($\eta_{11}$), normalized covariance between the mRNA and a reporter protein ($\eta_{12}$) and the normalized covariance between the two reporter proteins ($\eta_{23}$) were calculated using the analytical $\eta$ values for function (a) and above for function (b). \\
+
+Additionally, a second method for calculating $\eta_{11}$, $\eta_{12}$ and $\eta_{23}$, referred to as the numerical method, is included for comparison. Covariance between abundances of two molecular species weighted by jump times between reactions was calculated and normalised by the average molecule abundances based on the principal that...
+
+```{r}
+# Test different parameters
+parameterSearch <- function(test_lambdas_1 = c(1), test_lambdas_2 = c(1),
+                            test_betas_1 = c(1), test_betas_2 = c(1),
+                            test_Ks = c(NA), X, deltas, rates, N = 50000,
+                            flux_threshold = 0.1, stop_at_stationary = FALSE,
+                            min_N = 10000, function_type = "A", verbose = 0,
+                            previous_search_stats = data.frame()) {
+  
+  # Record parameters and their results
+  parameter_combination <- data.frame()
+  sim_results <- list()
+  stats_results <- list()
+  
+  # Assign an ID for the combination
+  id <- 0
+  
+  # Test each parameter combination
+  for (l1 in test_lambdas_1) {
+    for (l2 in test_lambdas_2) {
+      for (b1 in test_betas_1) {
+        for (b2 in test_betas_2) {
+          for (k in test_Ks) {
+            
+            new_params <- list(lambda_1 = l1,
+                               lambda_2 = l2,
+                               beta_1 = b1,
+                               beta_2 = b2,
+                               K = k)
+            
+            # Check whether combination was tested previously in a different run
+            continue_search <- TRUE
+            
+            if (nrow(previous_search_stats) > 0) {
+              if (nrow(merge(new_params, previous_search_stats)) > 0) {
+                continue_search <- FALSE
+              }
+            }
+            
+            if (continue_search) {
+              # Set unique ID
+              id <- id + 1
+              
+              if (verbose > 0) {
+                message(paste("Reached step", id))
+                message(paste("Testing", toString(new_params)))
+              }
+              
+              # Record the lambdas, betas and K
+              parameter_combination <- rbind(parameter_combination, new_params)
+              
+              # Run the Gillespie algorithm
+              test_simulation <- gillespie(X = X_initial,
+                                           rate_constants = new_params,
+                                           deltas = deltas,
+                                           rates = rates,
+                                           N = N,
+                                           flux_threshold = flux_threshold,
+                                           stop_at_stationary = stop_at_stationary,
+                                           min_N = min_N)
+              
+              # Calculate normalised variance and covariances
+              stats <- calculateStats(X_over_time = test_simulation$molecules_over_time,
+                                      rate_constants = new_params,
+                                      jump_times = test_simulation$jump_times,
+                                      function_type = function_type)
+              
+              # Record the results for the parameter combination
+              sim_results[[id]] <- test_simulation
+              stats_results[[id]] <- stats
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  # Combine parameters with stats
+  parameter_stats <- cbind(parameter_combination, do.call(rbind, stats_results))
+  parameter_stats <- data.frame(lapply(parameter_stats, as.numeric))
+  
+  return(list(sim_results = sim_results,
+              parameter_stats = parameter_stats))
+}
 ```
 
