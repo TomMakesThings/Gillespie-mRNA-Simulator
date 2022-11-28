@@ -14,7 +14,7 @@ Code by [TomMakesThings](https://github.com/TomMakesThings/Genome-Sequence-Analy
 <br><br><br>
 
 ## Dual Reporter Method
-A modified gene produces two pieces of mRNA (<span style="color:red">$x_{1}$</span>) which stochastically transcribe different reporter proteins (<span style="color:deepskyblue">$x_{2}$</span>, <span style="color:purple">$x_{3}$</span>), e.g. CFP and GFP, independently of one another. This dual reporter method can be modeled by the following reaction scheme:
+A modified gene produces two pieces of mRNA (<span style="color:red">$x_{1}$</span>) which stochastically transcribe different reporter proteins (<span style="color:deepskyblue">$x_{2}$</span>, <span style="color:purple">$x_{3}$</span>), e.g. CFP and GFP, independently of one another. This dual reporter method can be modelled by the following reaction scheme:
 
 $\text{Transcription: } x_{1} \xrightarrow[]{f(x_{1})} x_{1} + 1$
 
@@ -494,9 +494,9 @@ calculateStats <- function(X_over_time, rate_constants, jump_times,
 }
 ```
 
-A parameter search was performed for functions (a) and (b) through testing 60 $\lambda_{1}$ values within the range [0.1, 100] for (a) and 64 combinations of $\lambda_{1}$ and $K$ values within the range [0.1, 100] for (b). For each parameter set, the Gillespie algorithm was run for 100,000 iterations. The normalized variance of the mRNA ($\eta_{11}$), normalized covariance between the mRNA and a reporter protein ($\eta_{12}$) and the normalized covariance between the two reporter proteins ($\eta_{23}$) were calculated using the analytical $\eta$ values for function (a) and above for function (b). \\
+A parameter search was implemented for functions (a) and (b) that is set to test 60 $\lambda_{1}$ values within the range [0.1, 100] for (a) and 64 combinations of $\lambda_{1}$ and $K$ values within the range [0.1, 100] for (b). For each parameter set, the Gillespie algorithm is set to run for 100,000 iterations. The normalized variance of the mRNA ($\eta_{11}$), normalized covariance between the mRNA and a reporter protein ($\eta_{12}$) and the normalized covariance between the two reporter proteins ($\eta_{23}$) is calculated using the analytical $\eta$ values for function (a) and above for function (b). \\
 
-Additionally, a second method for calculating $\eta_{11}$, $\eta_{12}$ and $\eta_{23}$, referred to as the numerical method, is included for comparison. Covariance between abundances of two molecular species weighted by jump times between reactions was calculated and normalised by the average molecule abundances based on the principal that...
+Additionally, a second method for calculating $\eta_{11}$, $\eta_{12}$ and $\eta_{23}$, referred to as the numerical method, is included for comparison.
 
 ```{r}
 # Test different parameters
